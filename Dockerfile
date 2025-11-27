@@ -31,8 +31,14 @@ RUN a2enmod rewrite
 # Copy existing application directory contents
 COPY . /var/www/html
 
+# Create .env file from .env.example
+RUN cp .env.example .env || touch .env
+
 # Install PHP dependencies
 RUN composer install --no-dev --optimize-autoloader --no-interaction
+
+# Generate application key (Railway env vars will override at runtime)
+RUN php artisan key:generate --no-interaction
 
 # Copy existing application directory permissions
 RUN chown -R www-data:www-data /var/www/html \
