@@ -23,8 +23,10 @@ return [
         'http://localhost:8081',
         'http://localhost:19000',
         'http://localhost:19006',
-        env('FRONTEND_URL'), // Production frontend URL from Railway
-    ]),
+        env('FRONTEND_URL'), // Production frontend URL from Railway (must be set!)
+    ], function($value) {
+        return !empty($value); // Remove empty strings and null values
+    }),
 
     'allowed_origins_patterns' => [
         '/^exp:\/\/.*/',  // Expo mobile development
