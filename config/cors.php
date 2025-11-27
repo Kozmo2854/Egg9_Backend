@@ -27,9 +27,7 @@ return [
     ]),
 
     'allowed_origins_patterns' => [
-        '/^exp:\/\/.*/',
-        '/^https:\/\/.*\.railway\.app$/',  // Allow all Railway domains
-        '/^https:\/\/.*\.up\.railway\.app$/',  // Allow all Railway up domains
+        '/^exp:\/\/.*/',  // Expo mobile development
     ],
 
     'allowed_headers' => ['*'],
