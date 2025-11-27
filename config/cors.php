@@ -19,14 +19,17 @@ return [
 
     'allowed_methods' => ['*'],
 
-    'allowed_origins' => [
+    'allowed_origins' => array_filter([
         'http://localhost:8081',
         'http://localhost:19000',
         'http://localhost:19006',
-    ],
+        env('FRONTEND_URL'), // Production frontend URL from Railway
+    ]),
 
     'allowed_origins_patterns' => [
         '/^exp:\/\/.*/',
+        '/^https:\/\/.*\.railway\.app$/',  // Allow all Railway domains
+        '/^https:\/\/.*\.up\.railway\.app$/',  // Allow all Railway up domains
     ],
 
     'allowed_headers' => ['*'],
