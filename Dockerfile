@@ -31,6 +31,9 @@ RUN a2enmod rewrite
 # Copy existing application directory contents
 COPY . /var/www/html
 
+# Install PHP dependencies
+RUN composer install --no-dev --optimize-autoloader --no-interaction
+
 # Copy existing application directory permissions
 RUN chown -R www-data:www-data /var/www/html \
     && chmod -R 755 /var/www/html/storage \
