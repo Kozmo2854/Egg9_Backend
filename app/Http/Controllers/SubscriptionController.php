@@ -2,8 +2,9 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Order;
 use App\Models\Subscription;
-use App\Models\WeeklyStock;
+use App\Models\Week;
 use Illuminate\Http\Request;
 use Illuminate\Validation\ValidationException;
 
@@ -47,7 +48,8 @@ class SubscriptionController extends Controller
     {
         $request->validate([
             'quantity' => 'required|integer|min:10|max:30',
-            'period' => 'required|integer|min:4|max:12',
+            'period' => 'required|integer|min:2|max:4',
+            'start_next_week' => 'sometimes|boolean',
         ]);
 
         // Validate quantity is multiple of 10
@@ -57,30 +59,74 @@ class SubscriptionController extends Controller
             ]);
         }
 
-        $weeklyStock = WeeklyStock::getCurrentWeek();
+        $week = Week::getCurrentWeek();
 
-        if (!$weeklyStock) {
+        if (!$week) {
             return response()->json([
-                'message' => 'No weekly stock available for subscriptions',
+                'message' => 'No week available for subscriptions',
             ], 400);
         }
 
-        // Check available eggs
-        $availableEggs = $weeklyStock->getAvailableEggsForUser($request->user()->id);
+        // Check available eggs for current week (unless explicitly starting next week)
+        $startNextWeek = $request->input('start_next_week', false);
+        
+        if (!$startNextWeek) {
+            // Check if orders for this week are already delivered
+            if ($week->all_orders_delivered) {
+                $nextWeekStart = now()->addWeek()->startOfWeek();
+                $nextWeekEnd = $nextWeekStart->copy()->addDays(6);
+                
+                return response()->json([
+                    'message' => 'insufficient_stock_this_week',
+                    'availableEggs' => 0,
+                    'requiredEggs' => $request->quantity,
+                    'nextWeekStart' => $nextWeekStart->toISOString(),
+                    'nextWeekEnd' => $nextWeekEnd->toISOString(),
+                    'suggestion' => 'Orders for this week have been delivered. Would you like to start your subscription from next week?',
+                ], 409);
+            }
+            
+            // When creating a NEW subscription, check actual available eggs (without adding back user's existing orders)
+            // This is different from modifying an order where we add back the user's existing order
+            $availableEggs = $week->getAvailableEggsForUser(null);
+            
+            // If no stock available, offer to start next week
         if ($request->quantity > $availableEggs) {
+                $nextWeekStart = now()->addWeek()->startOfWeek();
+                $nextWeekEnd = $nextWeekStart->copy()->addDays(6);
+                
             return response()->json([
-                'message' => 'Insufficient stock available for subscription',
+                    'message' => 'insufficient_stock_this_week',
                 'availableEggs' => $availableEggs,
-            ], 400);
+                    'requiredEggs' => $request->quantity,
+                    'nextWeekStart' => $nextWeekStart->toISOString(),
+                    'nextWeekEnd' => $nextWeekEnd->toISOString(),
+                    'suggestion' => 'There are no eggs left for this week. Would you like to start your subscription from next week?',
+                ], 409);
+            }
         }
 
-        // Cancel any existing active subscription
-        Subscription::where('user_id', $request->user()->id)
+        // Cancel any existing active subscription and delete its pending orders
+        $oldSubscriptions = Subscription::where('user_id', $request->user()->id)
             ->where('status', 'active')
-            ->update(['status' => 'cancelled']);
+            ->get();
+            
+        foreach ($oldSubscriptions as $oldSub) {
+            // Delete pending orders from old subscription
+            Order::where('subscription_id', $oldSub->id)
+                ->where('status', 'pending')
+                ->delete();
+            
+            // Cancel the subscription
+            $oldSub->update(['status' => 'cancelled']);
+        }
 
         // Calculate next delivery date (next Monday)
         $nextDelivery = now()->addWeek()->startOfWeek();
+
+        // If creating order for current week, reduce weeks_remaining by 1
+        // since we're using one week immediately
+        $weeksRemaining = $startNextWeek ? $request->period : $request->period - 1;
 
         // Create the subscription
         $subscription = Subscription::create([
@@ -88,10 +134,24 @@ class SubscriptionController extends Controller
             'quantity' => $request->quantity,
             'frequency' => 'weekly',
             'period' => $request->period,
-            'weeks_remaining' => $request->period,
+            'weeks_remaining' => $weeksRemaining,
             'status' => 'active',
             'next_delivery' => $nextDelivery,
         ]);
+
+        // Create an order for this week if not starting next week
+        if (!$startNextWeek) {
+            $total = \App\Models\Order::calculateTotal($request->quantity, $week->price_per_dozen);
+            
+            \App\Models\Order::create([
+                'user_id' => $request->user()->id,
+                'subscription_id' => $subscription->id,
+                'week_id' => $week->id,
+                'quantity' => $request->quantity,
+                'total' => $total,
+                'status' => 'pending',
+            ]);
+        }
 
         return response()->json([
             'subscription' => [
@@ -135,6 +195,11 @@ class SubscriptionController extends Controller
                 'message' => 'Subscription is not active',
             ], 400);
         }
+
+        // Delete all pending orders associated with this subscription
+        Order::where('subscription_id', $subscription->id)
+            ->where('status', 'pending')
+            ->delete();
 
         $subscription->update(['status' => 'cancelled']);
 

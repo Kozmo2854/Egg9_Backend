@@ -4,7 +4,8 @@ namespace App\Console\Commands;
 
 use App\Models\Order;
 use App\Models\Subscription;
-use App\Models\WeeklyStock;
+use App\Models\Week;
+use App\Models\AppSettings;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -16,14 +17,14 @@ class ProcessWeeklyCycle extends Command
      *
      * @var string
      */
-    protected $signature = 'egg9:process-weekly-cycle {--force : Force execution even if not Monday}';
+    protected $signature = 'egg9:process-weekly-cycle {--force : Force execution (testing mode: moves all weeks to past, then creates new week)}';
 
     /**
      * The console command description.
      *
      * @var string
      */
-    protected $description = 'Process weekly cycle: archive old week, create new week, process subscriptions';
+    protected $description = 'Process weekly cycle: archive old week, create new week, process subscriptions. Use --force for testing.';
 
     /**
      * Execute the console command.
@@ -41,6 +42,11 @@ class ProcessWeeklyCycle extends Command
         DB::beginTransaction();
 
         try {
+            // If force flag is set, move all existing weeks to the past for testing
+            if ($this->option('force')) {
+                $this->moveWeeksToPast();
+            }
+
             // Step 1: Archive previous week
             $this->archivePreviousWeek();
 
@@ -69,13 +75,35 @@ class ProcessWeeklyCycle extends Command
     }
 
     /**
+     * Move all existing weeks to the past (for testing with --force flag)
+     */
+    private function moveWeeksToPast()
+    {
+        $this->warn('🧪 TESTING MODE: Moving all existing weeks to the past...');
+
+        $allWeeks = Week::orderBy('week_start', 'desc')->get();
+
+        if ($allWeeks->isEmpty()) {
+            $this->line('  No weeks to move');
+            return;
+        }
+
+        // Delete all existing weeks to avoid duplicate key violations
+        // In testing mode, we don't need to preserve old week data
+        $count = Week::count();
+        Week::query()->delete();
+        
+        $this->info("  ✓ Deleted {$count} existing week(s) to prepare for new week");
+    }
+
+    /**
      * Archive previous week by marking it as closed
      */
     private function archivePreviousWeek()
     {
         $this->info('Step 1: Archiving previous week...');
 
-        $previousWeeks = WeeklyStock::where('is_ordering_open', true)
+        $previousWeeks = Week::where('is_ordering_open', true)
             ->where('week_end', '<', now())
             ->get();
 
@@ -99,23 +127,23 @@ class ProcessWeeklyCycle extends Command
         $weekEnd = $weekStart->copy()->addWeek()->subDay(); // Next Sunday
 
         // Check if week already exists
-        $existingWeek = WeeklyStock::where('week_start', $weekStart)->first();
+        $existingWeek = Week::where('week_start', $weekStart)->first();
 
         if ($existingWeek) {
             $this->line("  Week starting {$weekStart->format('Y-m-d')} already exists");
             return $existingWeek;
         }
 
-        // Get previous week's price or use default
-        $previousWeek = WeeklyStock::orderBy('week_start', 'desc')->first();
-        $pricePerDozen = $previousWeek ? $previousWeek->price_per_dozen : 5.99;
+        // Get default price from app settings
+        $settings = AppSettings::get();
+        $pricePerDozen = $settings->default_price_per_dozen;
 
-        $newWeek = WeeklyStock::create([
+        $newWeek = Week::create([
             'week_start' => $weekStart,
             'week_end' => $weekEnd,
             'available_eggs' => 0, // Admin will set this
             'price_per_dozen' => $pricePerDozen,
-            'is_ordering_open' => true,
+            'is_ordering_open' => false, // Will open when admin sets stock
             'delivery_date' => null,
             'delivery_time' => null,
             'all_orders_delivered' => false,
@@ -130,7 +158,7 @@ class ProcessWeeklyCycle extends Command
     /**
      * Process all active subscriptions
      */
-    private function processSubscriptions(WeeklyStock $newWeek)
+    private function processSubscriptions(Week $newWeek)
     {
         $this->info('Step 3: Processing active subscriptions...');
 
@@ -149,12 +177,12 @@ class ProcessWeeklyCycle extends Command
                 // Create order for this subscription
                 $order = Order::create([
                     'user_id' => $subscription->user_id,
+                    'subscription_id' => $subscription->id,
+                    'week_id' => $newWeek->id,
                     'quantity' => $subscription->quantity,
-                    'price_per_dozen' => $newWeek->price_per_dozen,
                     'total' => Order::calculateTotal($subscription->quantity, $newWeek->price_per_dozen),
                     'status' => 'pending',
-                    'delivery_status' => 'not_delivered',
-                    'week_start' => $newWeek->week_start,
+                    'is_paid' => false,
                 ]);
 
                 // Decrement weeks remaining
@@ -189,4 +217,3 @@ class ProcessWeeklyCycle extends Command
         }
     }
 }
-

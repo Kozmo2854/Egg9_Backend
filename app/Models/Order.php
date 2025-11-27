@@ -11,16 +11,21 @@ class Order extends Model
 
     protected $fillable = [
         'user_id',
+        'subscription_id',
+        'week_id',
         'quantity',
-        'price_per_dozen',
         'total',
         'status',
-        'delivery_status',
-        'week_start',
+        'is_paid',
+        'payment_submitted',
+        'picked_up',
     ];
 
     protected $casts = [
-        'week_start' => 'date',
+        'total' => 'decimal:2',
+        'is_paid' => 'boolean',
+        'payment_submitted' => 'boolean',
+        'picked_up' => 'boolean',
     ];
 
     /**
@@ -29,6 +34,22 @@ class Order extends Model
     public function user()
     {
         return $this->belongsTo(User::class);
+    }
+
+    /**
+     * Get the week this order belongs to
+     */
+    public function week()
+    {
+        return $this->belongsTo(Week::class);
+    }
+
+    /**
+     * Get the subscription that created this order (if any)
+     */
+    public function subscription()
+    {
+        return $this->belongsTo(Subscription::class);
     }
 
     /**
@@ -45,7 +66,19 @@ class Order extends Model
      */
     public function canBeModified(): bool
     {
-        return $this->status === 'pending';
+        // Orders can only be modified if they are pending AND not paid
+        return $this->status === 'pending' && !$this->is_paid;
+    }
+
+    /**
+     * Check if order should be marked as completed and update if necessary
+     * Order is completed when: delivered + paid + picked up
+     */
+    public function checkAndUpdateCompletion(): void
+    {
+        if ($this->status === 'delivered' && $this->is_paid && $this->picked_up) {
+            $this->update(['status' => 'completed']);
+        }
     }
 }
 

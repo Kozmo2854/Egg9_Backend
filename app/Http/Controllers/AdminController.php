@@ -2,10 +2,13 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\AppSettings;
 use App\Models\Order;
 use App\Models\Subscription;
-use App\Models\WeeklyStock;
+use App\Models\User;
+use App\Models\Week;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 
 class AdminController extends Controller
 {
@@ -14,7 +17,7 @@ class AdminController extends Controller
      */
     public function getAllOrders(Request $request)
     {
-        $orders = Order::with('user')
+        $orders = Order::with(['user', 'week'])
             ->orderBy('created_at', 'desc')
             ->get();
 
@@ -23,14 +26,17 @@ class AdminController extends Controller
                 return [
                     'id' => $order->id,
                     'userId' => $order->user_id,
+                    'subscriptionId' => $order->subscription_id,
+                    'weekId' => $order->week_id,
                     'userName' => $order->user->name,
                     'userEmail' => $order->user->email,
                     'quantity' => $order->quantity,
-                    'pricePerDozen' => (float) $order->price_per_dozen,
                     'total' => (float) $order->total,
                     'status' => $order->status,
-                    'deliveryStatus' => $order->delivery_status,
-                    'weekStart' => $order->week_start->toISOString(),
+                    'isPaid' => $order->is_paid,
+                    'paymentSubmitted' => $order->payment_submitted,
+                    'pickedUp' => $order->picked_up,
+                    'weekStart' => $order->week->week_start->toISOString(),
                     'createdAt' => $order->created_at->toISOString(),
                     'updatedAt' => $order->updated_at->toISOString(),
                 ];
@@ -39,11 +45,12 @@ class AdminController extends Controller
     }
 
     /**
-     * Get all subscriptions with user names
+     * Get all active subscriptions with user names
      */
     public function getAllSubscriptions(Request $request)
     {
         $subscriptions = Subscription::with('user')
+            ->where('status', 'active')
             ->orderBy('created_at', 'desc')
             ->get();
 
@@ -68,185 +75,247 @@ class AdminController extends Controller
     }
 
     /**
-     * Update the available eggs for current week
+     * Get all users with their order and subscription counts
      */
-    public function updateWeeklyStock(Request $request)
+    public function getAllUsers(Request $request)
     {
-        $request->validate([
-            'availableEggs' => 'required|integer|min:0',
+        $users = User::orderBy('created_at', 'desc')->get();
+
+        return response()->json([
+            'users' => $users->map(function ($user) {
+                return [
+                    'id' => $user->id,
+                    'name' => $user->name,
+                    'email' => $user->email,
+                    'phoneNumber' => $user->phone_number,
+                    'role' => $user->role,
+                    'createdAt' => $user->created_at->toISOString(),
+                ];
+            }),
         ]);
+    }
 
-        $weeklyStock = WeeklyStock::getCurrentWeek();
+    /**
+     * Get detailed information about a specific user including orders and subscriptions
+     */
+    public function getUserDetails(Request $request, $id)
+    {
+        $user = User::find($id);
 
-        if (!$weeklyStock) {
+        if (!$user) {
             return response()->json([
-                'message' => 'No weekly stock available',
+                'message' => 'User not found',
             ], 404);
         }
 
-        $weeklyStock->update([
-            'available_eggs' => $request->availableEggs,
-        ]);
+        // Get all orders for this user with week information
+        $orders = Order::where('user_id', $id)
+            ->with('week')
+            ->orderBy('created_at', 'desc')
+            ->get()
+            ->map(function ($order) {
+                return [
+                    'id' => $order->id,
+                    'subscriptionId' => $order->subscription_id,
+                    'isSubscription' => $order->subscription_id !== null,
+                    'weekId' => $order->week_id,
+                    'quantity' => $order->quantity,
+                    'total' => (float) $order->total,
+                    'status' => $order->status,
+                    'isPaid' => $order->is_paid,
+                    'paymentSubmitted' => $order->payment_submitted,
+                    'pickedUp' => $order->picked_up,
+                    'weekStart' => $order->week->week_start->toISOString(),
+                    'weekEnd' => $order->week->week_end->toISOString(),
+                    'createdAt' => $order->created_at->toISOString(),
+                ];
+            });
+
+        // Calculate total eggs bought (completed orders only)
+        $totalEggsBought = Order::where('user_id', $id)
+            ->where('status', 'completed')
+            ->sum('quantity');
+
+        // Get all subscriptions for this user
+        $subscriptions = Subscription::where('user_id', $id)
+            ->orderBy('created_at', 'desc')
+            ->get()
+            ->map(function ($subscription) {
+                return [
+                    'id' => $subscription->id,
+                    'quantity' => $subscription->quantity,
+                    'frequency' => $subscription->frequency,
+                    'period' => $subscription->period,
+                    'weeksRemaining' => $subscription->weeks_remaining,
+                    'status' => $subscription->status,
+                    'nextDelivery' => $subscription->next_delivery ? $subscription->next_delivery->toISOString() : null,
+                    'createdAt' => $subscription->created_at->toISOString(),
+                    'updatedAt' => $subscription->updated_at->toISOString(),
+                ];
+            });
 
         return response()->json([
-            'weeklyStock' => [
-                'id' => $weeklyStock->id,
-                'weekStart' => $weeklyStock->week_start->toISOString(),
-                'weekEnd' => $weeklyStock->week_end->toISOString(),
-                'availableEggs' => $weeklyStock->available_eggs,
-                'pricePerDozen' => (float) $weeklyStock->price_per_dozen,
-                'isOrderingOpen' => $weeklyStock->is_ordering_open,
-                'deliveryDate' => $weeklyStock->delivery_date ? $weeklyStock->delivery_date->toISOString() : null,
-                'deliveryTime' => $weeklyStock->delivery_time,
-                'allOrdersDelivered' => $weeklyStock->all_orders_delivered,
+            'user' => [
+                'id' => $user->id,
+                'name' => $user->name,
+                'email' => $user->email,
+                'phoneNumber' => $user->phone_number,
+                'role' => $user->role,
+                'createdAt' => $user->created_at->toISOString(),
+            ],
+            'orders' => $orders,
+            'subscriptions' => $subscriptions,
+            'totalEggsBought' => $totalEggsBought,
+        ]);
+    }
+
+    /**
+     * Confirm payment for an order (sets is_paid to true)
+     * Also checks if order should be marked as completed
+     */
+    public function confirmPayment(Request $request, $id)
+    {
+        $order = Order::with('week')->find($id);
+
+        if (!$order) {
+            return response()->json([
+                'message' => 'Order not found',
+            ], 404);
+        }
+
+        $order->update(['is_paid' => true]);
+        
+        // Check if order is now complete (delivered + paid + picked up)
+        $order->refresh();
+        $order->checkAndUpdateCompletion();
+
+        return response()->json([
+            'message' => 'Payment confirmed successfully',
+            'order' => [
+                'id' => $order->id,
+                'userId' => $order->user_id,
+                'subscriptionId' => $order->subscription_id,
+                'userName' => $order->user->name,
+                'userEmail' => $order->user->email,
+                'weekId' => $order->week_id,
+                'quantity' => $order->quantity,
+                'total' => (float) $order->total,
+                'status' => $order->status,
+                'isPaid' => $order->is_paid,
+                'paymentSubmitted' => $order->payment_submitted,
+                'pickedUp' => $order->picked_up,
+                'weekStart' => $order->week->week_start->toISOString(),
+                'createdAt' => $order->created_at->toISOString(),
+                'updatedAt' => $order->updated_at->toISOString(),
             ],
         ]);
     }
 
     /**
-     * Update delivery date and time for current week
-     */
-    public function updateDeliveryInfo(Request $request)
-    {
-        $request->validate([
-            'deliveryDate' => 'required|date',
-            'deliveryTime' => 'required|string',
-        ]);
-
-        $weeklyStock = WeeklyStock::getCurrentWeek();
-
-        if (!$weeklyStock) {
-            return response()->json([
-                'message' => 'No weekly stock available',
-            ], 404);
-        }
-
-        $weeklyStock->update([
-            'delivery_date' => $request->deliveryDate,
-            'delivery_time' => $request->deliveryTime,
-        ]);
-
-        return response()->json([
-            'weeklyStock' => [
-                'id' => $weeklyStock->id,
-                'weekStart' => $weeklyStock->week_start->toISOString(),
-                'weekEnd' => $weeklyStock->week_end->toISOString(),
-                'availableEggs' => $weeklyStock->available_eggs,
-                'pricePerDozen' => (float) $weeklyStock->price_per_dozen,
-                'isOrderingOpen' => $weeklyStock->is_ordering_open,
-                'deliveryDate' => $weeklyStock->delivery_date->toISOString(),
-                'deliveryTime' => $weeklyStock->delivery_time,
-                'allOrdersDelivered' => $weeklyStock->all_orders_delivered,
-            ],
-        ]);
-    }
-
-    /**
-     * Mark all orders for current week as delivered
+     * Mark all pending orders for current week as delivered (status → delivered)
+     * and closes ordering. Subscription lifecycle is managed by ProcessWeeklyCycle cron job.
      */
     public function markAllOrdersDelivered(Request $request)
     {
-        $weeklyStock = WeeklyStock::getCurrentWeek();
+        $week = Week::getCurrentWeek();
 
-        if (!$weeklyStock) {
+        if (!$week) {
             return response()->json([
-                'message' => 'No weekly stock available',
+                'message' => 'No week available',
             ], 404);
         }
 
-        // Mark all orders for this week as delivered
-        $updatedCount = Order::where('week_start', $weeklyStock->week_start)
-            ->update([
-                'delivery_status' => 'delivered',
+        DB::beginTransaction();
+
+        try {
+            // Mark all pending orders for this week as delivered (regardless of payment status)
+            $updatedCount = Order::where('week_id', $week->id)
+                ->where('status', 'pending')
+                ->update([
+                    'status' => 'delivered',
+                ]);
+
+            // Check each delivered order to see if it should be marked as completed
+            // (delivered + paid + picked up)
+            $deliveredOrders = Order::where('week_id', $week->id)
+                ->where('status', 'delivered')
+                ->get();
+
+            foreach ($deliveredOrders as $order) {
+                $order->checkAndUpdateCompletion();
+            }
+
+            // Note: weeks_remaining is now managed by the ProcessWeeklyCycle cron job
+            // We no longer decrement here to avoid double-decrementing
+
+            // Close ordering for this week and mark orders as delivered
+            $week->update([
+                'all_orders_delivered' => true,
+                'is_ordering_open' => false,
             ]);
 
-        // Update weekly stock flag
-        $weeklyStock->update([
-            'all_orders_delivered' => true,
-        ]);
+            DB::commit();
 
-        return response()->json([
-            'message' => "Successfully marked {$updatedCount} orders as delivered",
-            'updatedCount' => $updatedCount,
+            return response()->json([
+                'message' => "Successfully marked {$updatedCount} orders as delivered",
+                'updatedCount' => $updatedCount,
         ]);
+        } catch (\Exception $e) {
+            DB::rollBack();
+
+            return response()->json([
+                'message' => 'Failed to mark orders as delivered: ' . $e->getMessage(),
+            ], 500);
+    }
     }
 
     /**
-     * Approve an order
+     * Get payment settings
      */
-    public function approveOrder(Request $request, $id)
+    public function getPaymentSettings(Request $request)
     {
-        $order = Order::find($id);
-
-        if (!$order) {
-            return response()->json([
-                'message' => 'Order not found',
-            ], 404);
-        }
-
-        if ($order->status !== 'pending') {
-            return response()->json([
-                'message' => 'Only pending orders can be approved',
-            ], 400);
-        }
-
-        $order->update([
-            'status' => 'approved',
-        ]);
+        $settings = AppSettings::get();
 
         return response()->json([
-            'order' => [
-                'id' => $order->id,
-                'userId' => $order->user_id,
-                'quantity' => $order->quantity,
-                'pricePerDozen' => (float) $order->price_per_dozen,
-                'total' => (float) $order->total,
-                'status' => $order->status,
-                'deliveryStatus' => $order->delivery_status,
-                'weekStart' => $order->week_start->toISOString(),
-                'createdAt' => $order->created_at->toISOString(),
-                'updatedAt' => $order->updated_at->toISOString(),
+            'paymentSettings' => [
+                'bankAccountNumber' => $settings->bank_account_number,
+                'recipientName' => $settings->recipient_name,
+                'paymentPurpose' => $settings->payment_purpose,
+                'paymentCode' => $settings->payment_code,
             ],
         ]);
     }
 
     /**
-     * Decline an order
+     * Update payment settings
      */
-    public function declineOrder(Request $request, $id)
+    public function updatePaymentSettings(Request $request)
     {
-        $order = Order::find($id);
+        $validated = $request->validate([
+            'bank_account_number' => 'required|string|max:30',
+            'recipient_name' => 'required|string|max:100',
+            'payment_purpose' => 'required|string|max:150',
+            'payment_code' => 'required|string|max:10',
+        ]);
 
-        if (!$order) {
-            return response()->json([
-                'message' => 'Order not found',
-            ], 404);
-        }
-
-        if ($order->status !== 'pending') {
-            return response()->json([
-                'message' => 'Only pending orders can be declined',
-            ], 400);
-        }
-
-        $order->update([
-            'status' => 'declined',
+        $settings = AppSettings::get();
+        $settings->update([
+            'bank_account_number' => $validated['bank_account_number'],
+            'recipient_name' => $validated['recipient_name'],
+            'payment_purpose' => $validated['payment_purpose'],
+            'payment_code' => $validated['payment_code'],
         ]);
 
         return response()->json([
-            'order' => [
-                'id' => $order->id,
-                'userId' => $order->user_id,
-                'quantity' => $order->quantity,
-                'pricePerDozen' => (float) $order->price_per_dozen,
-                'total' => (float) $order->total,
-                'status' => $order->status,
-                'deliveryStatus' => $order->delivery_status,
-                'weekStart' => $order->week_start->toISOString(),
-                'createdAt' => $order->created_at->toISOString(),
-                'updatedAt' => $order->updated_at->toISOString(),
+            'message' => 'Payment settings updated successfully',
+            'paymentSettings' => [
+                'bankAccountNumber' => $settings->bank_account_number,
+                'recipientName' => $settings->recipient_name,
+                'paymentPurpose' => $settings->payment_purpose,
+                'paymentCode' => $settings->payment_code,
             ],
         ]);
     }
+
 }
 

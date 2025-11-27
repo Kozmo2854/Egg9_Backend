@@ -49,7 +49,7 @@ class Subscription extends Model
             return null;
         }
 
-        $currentWeek = WeeklyStock::getCurrentWeek();
+        $currentWeek = Week::getCurrentWeek();
         if (!$currentWeek) {
             return null;
         }
@@ -57,12 +57,10 @@ class Subscription extends Model
         // Create an order for this subscription
         $order = Order::create([
             'user_id' => $this->user_id,
+            'week_id' => $currentWeek->id,
             'quantity' => $this->quantity,
-            'price_per_dozen' => $currentWeek->price_per_dozen,
             'total' => Order::calculateTotal($this->quantity, $currentWeek->price_per_dozen),
             'status' => 'pending',
-            'delivery_status' => 'not_delivered',
-            'week_start' => $currentWeek->week_start,
         ]);
 
         // Decrement weeks remaining

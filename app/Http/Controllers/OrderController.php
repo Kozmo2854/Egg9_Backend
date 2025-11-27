@@ -3,54 +3,51 @@
 namespace App\Http\Controllers;
 
 use App\Models\Order;
-use App\Models\WeeklyStock;
+use App\Models\Week;
+use App\Services\OrderService;
 use Illuminate\Http\Request;
 use Illuminate\Validation\ValidationException;
 
 class OrderController extends Controller
 {
+    protected OrderService $orderService;
+
+    public function __construct(OrderService $orderService)
+    {
+        $this->orderService = $orderService;
+    }
     /**
      * Get all orders for the authenticated user
      */
     public function index(Request $request)
     {
         $orders = $request->user()->orders()
+            ->with('week')
             ->orderBy('created_at', 'desc')
             ->get();
 
         return response()->json([
-            'orders' => $orders->map(function ($order) {
-                return [
-                    'id' => $order->id,
-                    'userId' => $order->user_id,
-                    'quantity' => $order->quantity,
-                    'pricePerDozen' => (float) $order->price_per_dozen,
-                    'total' => (float) $order->total,
-                    'status' => $order->status,
-                    'deliveryStatus' => $order->delivery_status,
-                    'weekStart' => $order->week_start->toISOString(),
-                    'createdAt' => $order->created_at->toISOString(),
-                    'updatedAt' => $order->updated_at->toISOString(),
-                ];
-            }),
+            'orders' => $orders->map(fn($order) => $this->orderService->formatOrder($order)),
         ]);
     }
 
     /**
-     * Get user's order for the current week
+     * Get user's order for the current week (one-time orders only)
      */
     public function getCurrentWeekOrder(Request $request)
     {
-        $weeklyStock = WeeklyStock::getCurrentWeek();
+        $week = Week::getCurrentWeek();
 
-        if (!$weeklyStock) {
+        if (!$week) {
             return response()->json([
                 'order' => null,
             ]);
         }
 
         $order = Order::where('user_id', $request->user()->id)
-            ->where('week_start', $weeklyStock->week_start)
+            ->where('week_id', $week->id)
+            ->whereNull('subscription_id') // Only one-time orders
+            ->with('week')
             ->first();
 
         if (!$order) {
@@ -60,18 +57,37 @@ class OrderController extends Controller
         }
 
         return response()->json([
-            'order' => [
-                'id' => $order->id,
-                'userId' => $order->user_id,
-                'quantity' => $order->quantity,
-                'pricePerDozen' => (float) $order->price_per_dozen,
-                'total' => (float) $order->total,
-                'status' => $order->status,
-                'deliveryStatus' => $order->delivery_status,
-                'weekStart' => $order->week_start->toISOString(),
-                'createdAt' => $order->created_at->toISOString(),
-                'updatedAt' => $order->updated_at->toISOString(),
-            ],
+            'order' => $this->orderService->formatOrder($order),
+        ]);
+    }
+
+    /**
+     * Get user's subscription order for the current week
+     */
+    public function getCurrentWeekSubscriptionOrder(Request $request)
+    {
+        $week = Week::getCurrentWeek();
+
+        if (!$week) {
+            return response()->json([
+                'order' => null,
+            ]);
+        }
+
+        $order = Order::where('user_id', $request->user()->id)
+            ->where('week_id', $week->id)
+            ->whereNotNull('subscription_id') // Only subscription orders
+            ->with('week')
+            ->first();
+
+        if (!$order) {
+            return response()->json([
+                'order' => null,
+            ]);
+        }
+
+        return response()->json([
+            'order' => $this->orderService->formatOrder($order),
         ]);
     }
 
@@ -91,18 +107,34 @@ class OrderController extends Controller
             ]);
         }
 
-        $weeklyStock = WeeklyStock::getCurrentWeek();
+        $week = Week::getCurrentWeek();
 
-        if (!$weeklyStock) {
+        if (!$week) {
             return response()->json([
-                'message' => 'No weekly stock available for ordering',
+                'message' => 'No week available for ordering',
             ], 400);
         }
 
-        // Check if user already has an order for this week
+        // Check if ordering is open for this week
+        if (!$week->is_ordering_open) {
+            return response()->json([
+                'message' => 'Ordering is closed for this week',
+            ], 400);
+        }
+
+        // Check if orders for this week are already delivered
+        if ($week->all_orders_delivered) {
+            return response()->json([
+                'message' => 'Orders for this week have already been delivered. Please wait for the next week.',
+            ], 400);
+        }
+
+        // Check if user already has a one-time order for this week
+        // Note: Users can have both a subscription order AND a one-time order
         $existingOrder = Order::where('user_id', $request->user()->id)
-            ->where('week_start', $weeklyStock->week_start)
+            ->where('week_id', $week->id)
             ->where('status', 'pending')
+            ->whereNull('subscription_id') // Only check for one-time orders
             ->first();
 
         if ($existingOrder) {
@@ -112,7 +144,7 @@ class OrderController extends Controller
         }
 
         // Check available eggs
-        $availableEggs = $weeklyStock->getAvailableEggsForUser($request->user()->id);
+        $availableEggs = $week->getAvailableEggsForUser($request->user()->id);
         if ($request->quantity > $availableEggs) {
             return response()->json([
                 'message' => 'Insufficient stock available',
@@ -121,31 +153,20 @@ class OrderController extends Controller
         }
 
         // Create the order
-        $total = Order::calculateTotal($request->quantity, $weeklyStock->price_per_dozen);
+        $total = Order::calculateTotal($request->quantity, $week->price_per_dozen);
 
         $order = Order::create([
             'user_id' => $request->user()->id,
+            'week_id' => $week->id,
             'quantity' => $request->quantity,
-            'price_per_dozen' => $weeklyStock->price_per_dozen,
             'total' => $total,
             'status' => 'pending',
-            'delivery_status' => 'not_delivered',
-            'week_start' => $weeklyStock->week_start,
         ]);
 
+        $order->load('week');
+
         return response()->json([
-            'order' => [
-                'id' => $order->id,
-                'userId' => $order->user_id,
-                'quantity' => $order->quantity,
-                'pricePerDozen' => (float) $order->price_per_dozen,
-                'total' => (float) $order->total,
-                'status' => $order->status,
-                'deliveryStatus' => $order->delivery_status,
-                'weekStart' => $order->week_start->toISOString(),
-                'createdAt' => $order->created_at->toISOString(),
-                'updatedAt' => $order->updated_at->toISOString(),
-            ],
+            'order' => $this->formatOrder($order),
         ], 201);
     }
 
@@ -165,7 +186,7 @@ class OrderController extends Controller
             ]);
         }
 
-        $order = Order::find($id);
+        $order = Order::with('week')->find($id);
 
         if (!$order) {
             return response()->json([
@@ -187,16 +208,30 @@ class OrderController extends Controller
             ], 400);
         }
 
-        $weeklyStock = WeeklyStock::getCurrentWeek();
+        // Prevent updating subscription-generated orders directly
+        if ($order->subscription_id) {
+            return response()->json([
+                'message' => 'Cannot update subscription orders directly. Please modify your subscription instead.',
+            ], 400);
+        }
 
-        if (!$weeklyStock || $order->week_start->notEqualTo($weeklyStock->week_start)) {
+        $week = Week::getCurrentWeek();
+
+        if (!$week || $order->week_id !== $week->id) {
             return response()->json([
                 'message' => 'Cannot update order for past or closed weeks',
             ], 400);
         }
 
+        // Check if ordering is open for this week
+        if (!$week->is_ordering_open) {
+            return response()->json([
+                'message' => 'Ordering is closed for this week',
+            ], 400);
+        }
+
         // Check available eggs (including user's current order)
-        $availableEggs = $weeklyStock->getAvailableEggsForUser($request->user()->id);
+        $availableEggs = $week->getAvailableEggsForUser($request->user()->id);
         if ($request->quantity > $availableEggs) {
             return response()->json([
                 'message' => 'Insufficient stock available',
@@ -204,27 +239,18 @@ class OrderController extends Controller
             ], 400);
         }
 
-        // Update the order
-        $total = Order::calculateTotal($request->quantity, $order->price_per_dozen);
+        // Update the order (recalculate total with current week's price)
+        $total = Order::calculateTotal($request->quantity, $week->price_per_dozen);
 
         $order->update([
             'quantity' => $request->quantity,
             'total' => $total,
         ]);
 
+        $order->load('week');
+
         return response()->json([
-            'order' => [
-                'id' => $order->id,
-                'userId' => $order->user_id,
-                'quantity' => $order->quantity,
-                'pricePerDozen' => (float) $order->price_per_dozen,
-                'total' => (float) $order->total,
-                'status' => $order->status,
-                'deliveryStatus' => $order->delivery_status,
-                'weekStart' => $order->week_start->toISOString(),
-                'createdAt' => $order->created_at->toISOString(),
-                'updatedAt' => $order->updated_at->toISOString(),
-            ],
+            'order' => $this->orderService->formatOrder($order),
         ]);
     }
 
@@ -255,11 +281,96 @@ class OrderController extends Controller
             ], 400);
         }
 
+        // Prevent cancelling subscription-generated orders directly
+        if ($order->subscription_id) {
+            return response()->json([
+                'message' => 'Cannot cancel subscription orders directly. Please cancel your subscription instead.',
+            ], 400);
+        }
+
         $order->delete();
 
         return response()->json([
             'message' => 'Order cancelled successfully',
         ]);
     }
-}
 
+    /**
+     * Mark order payment as submitted by user
+     */
+    public function markPaymentSubmitted(Request $request, $id)
+    {
+        $order = Order::with('week')->find($id);
+
+        if (!$order) {
+            return response()->json([
+                'message' => 'Order not found',
+            ], 404);
+        }
+
+        // Check ownership
+        if ($order->user_id !== $request->user()->id) {
+            return response()->json([
+                'message' => 'Unauthorized to update this order',
+            ], 403);
+        }
+
+        // Only allow marking payment for pending or delivered orders (not completed)
+        if ($order->status === 'completed') {
+            return response()->json([
+                'message' => 'Cannot mark payment for completed orders',
+            ], 400);
+        }
+
+        $order->update(['payment_submitted' => true]);
+
+        return response()->json([
+            'message' => 'Payment marked as submitted successfully',
+            'order' => $this->formatOrder($order),
+        ]);
+    }
+
+    /**
+     * Confirm pickup by user (for delivered orders)
+     * Also checks if order should be marked as completed
+     */
+    public function confirmPickup(Request $request, $id)
+    {
+        $order = Order::with('week')->find($id);
+
+        if (!$order) {
+            return response()->json([
+                'message' => 'Order not found',
+            ], 404);
+        }
+
+        // Check ownership
+        if ($order->user_id !== $request->user()->id) {
+            return response()->json([
+                'message' => 'Unauthorized to update this order',
+            ], 403);
+        }
+
+        // Only allow confirming delivered orders
+        if (!in_array($order->status, ['delivered', 'completed'])) {
+            return response()->json([
+                'message' => 'Only delivered orders can be confirmed as picked up',
+            ], 400);
+        }
+
+        $order->update(['picked_up' => true]);
+        
+        // Check if order is now complete (delivered + paid + picked up)
+        $order->refresh();
+        $order->checkAndUpdateCompletion();
+
+        return response()->json([
+            'message' => 'Pickup confirmed successfully',
+            'order' => $this->formatOrder($order),
+        ]);
+    }
+
+    /**
+     * Format order data for API response
+     */
+}

@@ -4,10 +4,13 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
-class WeeklyStock extends Model
+class Week extends Model
 {
     use HasFactory;
+
+    protected $table = 'weeks';
 
     protected $fillable = [
         'week_start',
@@ -24,53 +27,54 @@ class WeeklyStock extends Model
         'week_start' => 'date',
         'week_end' => 'date',
         'delivery_date' => 'datetime',
+        'price_per_dozen' => 'decimal:2',
         'is_ordering_open' => 'boolean',
         'all_orders_delivered' => 'boolean',
     ];
 
     /**
-     * Get the current week's stock
+     * Get the orders for this week
      */
-    public static function getCurrentWeek()
+    public function orders(): HasMany
+    {
+        return $this->hasMany(Order::class);
+    }
+
+    /**
+     * Get the current week (based on dates only)
+     */
+    public static function getCurrentWeek(): ?self
     {
         $today = now()->startOfDay();
         return self::where('week_start', '<=', $today)
             ->where('week_end', '>=', $today)
-            ->where('is_ordering_open', true)
             ->first();
     }
 
     /**
      * Calculate available eggs for a specific user
-     * Takes into account all pending orders and active subscriptions
+     * Takes into account all pending orders (subscription orders are already included in orders table)
      */
     public function getAvailableEggsForUser(?int $userId = null): int
     {
         $available = $this->available_eggs;
 
         // Subtract all pending orders for this week (except the user's own order)
-        $pendingOrders = Order::where('week_start', $this->week_start)
+        // Note: We only count pending orders, not completed ones
+        // Subscription orders are already in the orders table, so no need to subtract subscriptions separately
+        $committedOrders = Order::where('week_id', $this->id)
             ->where('status', 'pending')
             ->when($userId, function ($query) use ($userId) {
                 return $query->where('user_id', '!=', $userId);
             })
             ->sum('quantity');
 
-        $available -= $pendingOrders;
+        $available -= $committedOrders;
 
-        // Subtract all active subscriptions (except the user's)
-        $activeSubscriptions = Subscription::where('status', 'active')
-            ->when($userId, function ($query) use ($userId) {
-                return $query->where('user_id', '!=', $userId);
-            })
-            ->sum('quantity');
-
-        $available -= $activeSubscriptions;
-
-        // Add back the user's existing order if they have one
+        // Add back the user's existing pending order if they have one
         if ($userId) {
             $userOrder = Order::where('user_id', $userId)
-                ->where('week_start', $this->week_start)
+                ->where('week_id', $this->id)
                 ->where('status', 'pending')
                 ->first();
 

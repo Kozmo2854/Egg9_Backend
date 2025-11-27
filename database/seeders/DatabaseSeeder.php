@@ -3,56 +3,56 @@
 namespace Database\Seeders;
 
 use App\Models\User;
-use App\Models\WeeklyStock;
-use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\Hash;
 
 class DatabaseSeeder extends Seeder
 {
-    use WithoutModelEvents;
-
     /**
      * Seed the application's database.
      */
     public function run(): void
     {
-        // Create test users as specified in requirements
+        // Create Admin User
         User::create([
             'name' => 'Admin User',
             'email' => 'admin@egg9.com',
+            'phone_number' => '+381 60 123 4567',
             'password' => Hash::make('password123'),
             'role' => 'admin',
         ]);
 
+        // Create Test Customer 1
         User::create([
-            'name' => 'John Smith',
+            'name' => 'Marko Marković',
             'email' => 'user1@egg9.com',
+            'phone_number' => '+381 62 111 2222',
             'password' => Hash::make('password123'),
             'role' => 'customer',
         ]);
 
+        // Create Test Customer 2
         User::create([
-            'name' => 'Jane Doe',
+            'name' => 'Ana Jovanović',
             'email' => 'user2@egg9.com',
+            'phone_number' => '+381 63 333 4444',
             'password' => Hash::make('password123'),
             'role' => 'customer',
         ]);
 
-        // Create a current week's stock for testing
-        $today = now();
-        $weekStart = $today->copy()->startOfWeek(); // Monday
-        $weekEnd = $weekStart->copy()->addWeek()->subDay(); // Next Sunday
-
-        WeeklyStock::create([
-            'week_start' => $weekStart,
-            'week_end' => $weekEnd,
-            'available_eggs' => 1000,
-            'price_per_dozen' => 5.99,
-            'is_ordering_open' => true,
-            'delivery_date' => $weekStart->copy()->addDays(5), // Saturday
-            'delivery_time' => '10:00 AM - 2:00 PM',
-            'all_orders_delivered' => false,
+        // Create Test Customer 3
+        User::create([
+            'name' => 'Petar Petrović',
+            'email' => 'user3@egg9.com',
+            'phone_number' => '+381 64 555 6666',
+            'password' => Hash::make('password123'),
+            'role' => 'customer',
         ]);
+
+        $this->command->info('Users created successfully!');
+        $this->command->info('Admin: admin@egg9.com / password123');
+        $this->command->info('User 1: user1@egg9.com / password123');
+        $this->command->info('User 2: user2@egg9.com / password123');
+        $this->command->info('User 3: user3@egg9.com / password123');
     }
 }

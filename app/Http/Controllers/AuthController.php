@@ -36,6 +36,7 @@ class AuthController extends Controller
                 'id' => $user->id,
                 'name' => $user->name,
                 'email' => $user->email,
+                'phoneNumber' => $user->phone_number,
                 'role' => $user->role,
                 'createdAt' => $user->created_at->toISOString(),
             ],
@@ -51,12 +52,14 @@ class AuthController extends Controller
         $request->validate([
             'name' => 'required|string|max:255',
             'email' => 'required|email|unique:users,email',
+            'phone_number' => 'required|string|max:20',
             'password' => 'required|string|min:6',
         ]);
 
         $user = User::create([
             'name' => $request->name,
             'email' => $request->email,
+            'phone_number' => $request->phone_number,
             'password' => Hash::make($request->password),
             'role' => 'customer',
         ]);
@@ -68,6 +71,7 @@ class AuthController extends Controller
                 'id' => $user->id,
                 'name' => $user->name,
                 'email' => $user->email,
+                'phoneNumber' => $user->phone_number,
                 'role' => $user->role,
                 'createdAt' => $user->created_at->toISOString(),
             ],
@@ -103,6 +107,7 @@ class AuthController extends Controller
                 'id' => $user->id,
                 'name' => $user->name,
                 'email' => $user->email,
+                'phoneNumber' => $user->phone_number,
                 'role' => $user->role,
                 'createdAt' => $user->created_at->toISOString(),
             ],
