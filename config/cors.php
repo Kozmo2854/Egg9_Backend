@@ -23,6 +23,8 @@ return [
         'http://localhost:8081',
         'http://localhost:19000',
         'http://localhost:19006',
+        'http://10.0.2.2:8081', // Android emulator accessing host machine
+        'http://172.17.0.1:8081', // Docker Android emulator accessing host
         env('FRONTEND_URL'), // Production frontend URL from Railway (must be set!)
     ], function($value) {
         return !empty($value); // Remove empty strings and null values
