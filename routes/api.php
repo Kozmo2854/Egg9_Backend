@@ -6,6 +6,7 @@ use App\Http\Controllers\SubscriptionController;
 use App\Http\Controllers\WeekController;
 use App\Http\Controllers\SettingsController;
 use App\Http\Controllers\AdminController;
+use App\Http\Controllers\CronController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
@@ -18,6 +19,9 @@ use Illuminate\Support\Facades\Route;
 // Authentication Routes (Public)
 Route::post('/login', [AuthController::class, 'login']);
 Route::post('/register', [AuthController::class, 'register']);
+
+// Cron Routes (Public but secured with CRON_SECRET)
+Route::post('/cron/process-weekly-cycle', [CronController::class, 'processWeeklyCycle']);
 
 // Protected Routes
 Route::middleware('auth:sanctum')->group(function () {
