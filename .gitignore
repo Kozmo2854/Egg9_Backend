@@ -21,3 +21,18 @@ yarn-error.log
 
 # Docker
 docker-compose.override.yml
+
+# Logs
+*.log
+storage/logs/*.log
+
+# Cache
+bootstrap/cache/*.php
+!bootstrap/cache/.gitignore
+
+# SQLite (if used locally)
+database/*.sqlite
+
+# Testing
+.phpunit.cache/
+coverage/
