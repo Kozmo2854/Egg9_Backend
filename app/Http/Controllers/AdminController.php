@@ -7,11 +7,15 @@ use App\Models\Order;
 use App\Models\Subscription;
 use App\Models\User;
 use App\Models\Week;
+use App\Services\PushNotificationService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
 class AdminController extends Controller
 {
+    public function __construct(
+        private PushNotificationService $pushService
+    ) {}
     /**
      * Get all orders with user names
      */
@@ -255,6 +259,9 @@ class AdminController extends Controller
             ]);
 
             DB::commit();
+
+            // Notify users that their orders have been delivered
+            $this->pushService->notifyOrderDelivered($week);
 
             return response()->json([
                 'message' => "Successfully marked {$updatedCount} orders as delivered",

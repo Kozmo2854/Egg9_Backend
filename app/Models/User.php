@@ -80,4 +80,12 @@ class User extends Authenticatable
     {
         return $this->hasOne(Subscription::class)->where('status', 'active');
     }
+
+    /**
+     * Get the push token for this user
+     */
+    public function pushToken()
+    {
+        return $this->hasOne(PushToken::class);
+    }
 }

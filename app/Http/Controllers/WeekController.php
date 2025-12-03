@@ -4,11 +4,15 @@ namespace App\Http\Controllers;
 
 use App\Models\Week;
 use App\Models\AppSettings;
+use App\Services\PushNotificationService;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 
 class WeekController extends Controller
 {
+    public function __construct(
+        private PushNotificationService $pushService
+    ) {}
     /**
      * Get current week's information
      */
@@ -68,6 +72,9 @@ class WeekController extends Controller
             ], 404);
         }
 
+        $previousAvailableEggs = $week->available_eggs;
+        $previousDeliveryDate = $week->delivery_date;
+
         if ($request->has('available_eggs')) {
             $week->available_eggs = $request->input('available_eggs');
             // Open ordering when stock is added
@@ -89,6 +96,17 @@ class WeekController extends Controller
         }
 
         $week->save();
+
+        // Send notifications for relevant changes
+        // Stock available: only when setting stock for the first time (was 0, now > 0)
+        if ($previousAvailableEggs == 0 && $week->available_eggs > 0) {
+            $this->pushService->notifyStockAvailable($week);
+        }
+
+        // Delivery scheduled: only when setting delivery date for the first time
+        if (!$previousDeliveryDate && $week->delivery_date) {
+            $this->pushService->notifyDeliveryScheduled($week);
+        }
 
         return response()->json([
             'message' => 'Week updated successfully',
@@ -114,6 +132,9 @@ class WeekController extends Controller
 
         // Also update all orders for this week to 'completed' status
         $week->orders()->where('status', 'approved')->update(['status' => 'completed']);
+
+        // Notify users that their orders have been delivered
+        $this->pushService->notifyOrderDelivered($week);
 
         return response()->json([
             'message' => 'All orders marked as delivered',

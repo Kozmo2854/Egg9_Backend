@@ -7,6 +7,7 @@ use App\Http\Controllers\WeekController;
 use App\Http\Controllers\SettingsController;
 use App\Http\Controllers\AdminController;
 use App\Http\Controllers\CronController;
+use App\Http\Controllers\PushTokenController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
@@ -22,6 +23,7 @@ Route::post('/register', [AuthController::class, 'register']);
 
 // Cron Routes (Public but secured with CRON_SECRET)
 Route::post('/cron/process-weekly-cycle', [CronController::class, 'processWeeklyCycle']);
+Route::post('/cron/payment-reminder', [CronController::class, 'sendPaymentReminders']);
 
 // Protected Routes
 Route::middleware('auth:sanctum')->group(function () {
@@ -50,6 +52,10 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/subscriptions/current', [SubscriptionController::class, 'getCurrent']);
     Route::post('/subscriptions', [SubscriptionController::class, 'store']);
     Route::delete('/subscriptions/{id}', [SubscriptionController::class, 'destroy']);
+
+    // Push Notifications
+    Route::post('/push-token', [PushTokenController::class, 'store']);
+    Route::delete('/push-token', [PushTokenController::class, 'destroy']);
 
     // Admin Routes
     Route::middleware('admin')->prefix('admin')->group(function () {
