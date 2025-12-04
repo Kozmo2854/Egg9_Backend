@@ -30,6 +30,8 @@ return [
 
     'allowed_origins_patterns' => [
         '/^exp:\/\/.*/',  // Expo mobile development
+        '/^http:\/\/192\.168\.\d+\.\d+:\d+$/',  // Local network IPs (for phone testing)
+        '/^http:\/\/10\.\d+\.\d+\.\d+:\d+$/',   // Local network IPs (alternative range)
     ],
 
     'allowed_headers' => ['*'],
