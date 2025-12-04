@@ -324,59 +324,5 @@ class AdminController extends Controller
         ]);
     }
 
-    /**
-     * Test push notification (Debug endpoint)
-     * Sends a test notification to all registered push tokens
-     */
-    public function testPushNotification(Request $request)
-    {
-        $tokens = \App\Models\PushToken::pluck('token')->toArray();
-        
-        \Illuminate\Support\Facades\Log::info('Test notification requested', [
-            'token_count' => count($tokens),
-            'tokens' => $tokens,
-        ]);
-        
-        if (empty($tokens)) {
-            return response()->json([
-                'message' => 'No push tokens registered',
-                'tokens' => [],
-            ], 400);
-        }
-        
-        // Send directly using HTTP client (bypass job queue for debugging)
-        $messages = array_map(fn($token) => [
-            'to' => $token,
-            'title' => '🧪 Test Notification',
-            'body' => 'This is a test notification from Egg9!',
-            'sound' => 'default',
-            'data' => ['type' => 'test'],
-        ], $tokens);
-        
-        try {
-            $response = \Illuminate\Support\Facades\Http::post('https://exp.host/--/api/v2/push/send', $messages);
-            
-            \Illuminate\Support\Facades\Log::info('Test notification response', [
-                'status' => $response->status(),
-                'body' => $response->body(),
-            ]);
-            
-            return response()->json([
-                'message' => 'Test notification sent',
-                'token_count' => count($tokens),
-                'expo_response' => $response->json(),
-            ]);
-        } catch (\Exception $e) {
-            \Illuminate\Support\Facades\Log::error('Test notification failed', [
-                'error' => $e->getMessage(),
-            ]);
-            
-            return response()->json([
-                'message' => 'Failed to send test notification',
-                'error' => $e->getMessage(),
-            ], 500);
-        }
-    }
-
 }
 
