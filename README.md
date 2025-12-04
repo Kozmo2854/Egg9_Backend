@@ -127,10 +127,20 @@ php artisan egg9:process-weekly-cycle --force
 Copy `.env.example` and configure database credentials.
 
 ### Production (Railway)
-Set environment variables:
-- `DB_CONNECTION=mysql`
-- `FRONTEND_URL=https://your-frontend-url` (for CORS)
-- Railway auto-provides MySQL credentials
+
+**Required environment variables:**
+
+| Variable | Description | Example |
+|----------|-------------|---------|
+| `DB_CONNECTION` | Database driver | `mysql` |
+| `FRONTEND_URL` | Frontend URL for CORS | `https://egg9frontend-production.up.railway.app` |
+| `QUEUE_CONNECTION` | Queue driver (use `sync` for immediate processing) | `sync` |
+| `CRON_SECRET` | Secret token for cron endpoint authentication | `your-secure-random-string` |
+
+**Notes:**
+- Railway auto-provides MySQL credentials (`DB_HOST`, `DB_PORT`, `DB_DATABASE`, `DB_USERNAME`, `DB_PASSWORD`)
+- `QUEUE_CONNECTION=sync` is **required** for push notifications to work without a queue worker
+- `CRON_SECRET` is required for the weekly cycle cron job endpoint
 
 ## Deployment
 
