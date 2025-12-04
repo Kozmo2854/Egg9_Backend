@@ -69,6 +69,9 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::put('/settings/price', [SettingsController::class, 'updatePrice']);
         Route::get('/settings/payment', [AdminController::class, 'getPaymentSettings']);
         Route::put('/settings/payment', [AdminController::class, 'updatePaymentSettings']);
+        
+        // Debug: Test push notification
+        Route::post('/test-notification', [AdminController::class, 'testPushNotification']);
     });
 });
 
