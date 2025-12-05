@@ -40,13 +40,15 @@ class DeliveryScheduledNotification extends Notification implements ShouldQueue
         $deliveryTime = $this->week->delivery_time ?? 'TBD';
 
         return (new MailMessage)
-            ->subject('🚚 Delivery Scheduled!')
+            ->subject('🐔 Your Eggs Are On Their Way!')
             ->greeting("Hi {$notifiable->name}!")
-            ->line('Your egg delivery has been scheduled!')
-            ->line("**Delivery Date:** {$deliveryDate}")
-            ->line("**Delivery Time:** {$deliveryTime}")
-            ->action('View Order', url('/'))
-            ->line('Make sure someone is available to receive your order.');
+            ->line("We're getting your eggs ready for delivery! 🥚")
+            ->line("**When to expect them:**")
+            ->line("📅 **{$deliveryDate}**")
+            ->line("🕐 **{$deliveryTime}**")
+            ->line("Make sure someone's around to welcome them!")
+            ->action('View Your Order', url('/'))
+            ->line('See you soon! 🐣');
     }
 
     /**
@@ -58,8 +60,8 @@ class DeliveryScheduledNotification extends Notification implements ShouldQueue
         $time = $this->week->delivery_time ?? '';
 
         return [
-            'title' => '🚚 Delivery Scheduled',
-            'body' => "Delivery on {$date}" . ($time ? " at {$time}" : ''),
+            'title' => '🐔 Delivery Coming!',
+            'body' => "Your eggs are on their way! Arriving {$date}" . ($time ? " at {$time}" : '') . " 🥚",
         ];
     }
 }

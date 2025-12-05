@@ -39,14 +39,15 @@ class PaymentReminderNotification extends Notification implements ShouldQueue
         $totalFormatted = number_format($this->total, 0);
 
         return (new MailMessage)
-            ->subject('💸 Payment Reminder - Egg9')
+            ->subject('🐔 Quick Reminder About Your Eggs!')
             ->greeting("Hi {$notifiable->name}!")
-            ->line('This is a friendly reminder that you have an unpaid egg order.')
-            ->line("**Order Details:**")
-            ->line("• Quantity: {$this->quantity} eggs")
-            ->line("• Amount Due: {$totalFormatted} RSD")
-            ->action('Pay Now', url('/'))
-            ->line('Please settle your payment at your earliest convenience.');
+            ->line("Just a friendly nudge – we noticed your egg order hasn't been paid yet! 🥚")
+            ->line("**Your order:**")
+            ->line("• {$this->quantity} eggs")
+            ->line("• **{$totalFormatted} RSD**")
+            ->line("No rush, but our chickens would appreciate it when you get a chance! 😊")
+            ->action('Complete Payment', url('/'))
+            ->line('Thanks for being part of the Egg9 family! 🐣');
     }
 
     /**
@@ -55,8 +56,8 @@ class PaymentReminderNotification extends Notification implements ShouldQueue
     public function toExpoPush(object $notifiable): array
     {
         return [
-            'title' => '💸 Payment Reminder',
-            'body' => 'You have unpaid orders. Please settle your payment soon!',
+            'title' => '🐔 Quick Reminder!',
+            'body' => "Don't forget about your eggs! Payment still pending 🥚",
         ];
     }
 }

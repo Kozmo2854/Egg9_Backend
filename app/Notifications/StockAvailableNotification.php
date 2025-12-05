@@ -41,10 +41,11 @@ class StockAvailableNotification extends Notification implements ShouldQueue
         return (new MailMessage)
             ->subject('🥚 Fresh Eggs Available This Week!')
             ->greeting("Hi {$notifiable->name}!")
-            ->line("Great news! This week's eggs are ready for ordering.")
+            ->line("Our chickens have been busy this week and we've got fresh eggs waiting for you! 🥚")
             ->line("**{$this->week->available_eggs} eggs** available at **{$pricePerDozen} RSD** per dozen.")
+            ->line('Don\'t miss out - order while supplies last!')
             ->action('Order Now', url('/'))
-            ->line('Don\'t miss out - order while supplies last!');
+            ->line('Thank you for supporting our little farm! 🐣');
     }
 
     /**
@@ -53,8 +54,8 @@ class StockAvailableNotification extends Notification implements ShouldQueue
     public function toExpoPush(object $notifiable): array
     {
         return [
-            'title' => '🥚 Stock Available!',
-            'body' => "{$this->week->available_eggs} eggs available this week!",
+            'title' => '🐔 Fresh Eggs Ready!',
+            'body' => "Our chickens have been busy! {$this->week->available_eggs} eggs available this week 🥚",
         ];
     }
 }

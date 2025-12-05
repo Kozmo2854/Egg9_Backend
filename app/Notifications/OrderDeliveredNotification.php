@@ -41,14 +41,15 @@ class OrderDeliveredNotification extends Notification implements ShouldQueue
         $totalFormatted = number_format($this->total, 0);
 
         return (new MailMessage)
-            ->subject('📦 Your Eggs Have Been Delivered!')
+            ->subject('🐔 Your Eggs Have Arrived!')
             ->greeting("Hi {$notifiable->name}!")
-            ->line('Your egg order has been delivered and is ready for pickup!')
-            ->line("**Order Details:**")
-            ->line("• Quantity: {$this->quantity} eggs")
+            ->line("Great news – your eggs have made it safely to you! 🥚")
+            ->line("**Your order:**")
+            ->line("• {$this->quantity} fresh eggs")
             ->line("• Total: {$totalFormatted} RSD")
-            ->action('View Order', url('/'))
-            ->line('Thank you for ordering from Egg9!');
+            ->line("They're ready and waiting for you to pick them up!")
+            ->action('View Your Order', url('/'))
+            ->line('Thank you for being part of the Egg9 family! 🐣');
     }
 
     /**
@@ -57,8 +58,8 @@ class OrderDeliveredNotification extends Notification implements ShouldQueue
     public function toExpoPush(object $notifiable): array
     {
         return [
-            'title' => '📦 Order Delivered!',
-            'body' => "Your {$this->quantity} eggs have been delivered.",
+            'title' => '🐔 Your Eggs Have Arrived!',
+            'body' => "Your {$this->quantity} eggs are ready for pickup! 🥚",
         ];
     }
 }

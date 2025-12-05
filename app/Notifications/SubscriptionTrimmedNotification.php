@@ -36,18 +36,17 @@ class SubscriptionTrimmedNotification extends Notification implements ShouldQueu
      */
     public function toMail(object $notifiable): MailMessage
     {
-        $reduction = $this->originalQuantity - $this->newQuantity;
-
         return (new MailMessage)
-            ->subject('⚠️ Subscription Adjusted - Egg9')
+            ->subject('🐔 A Small Adjustment to Your Order')
             ->greeting("Hi {$notifiable->name}!")
-            ->line('Due to limited stock this week, we had to adjust your subscription order.')
-            ->line("**Original quantity:** {$this->originalQuantity} eggs")
-            ->line("**Adjusted quantity:** {$this->newQuantity} eggs")
-            ->line("**Reduction:** {$reduction} eggs")
-            ->line('Your subscription will return to normal quantity when stock allows.')
-            ->action('View Order', url('/'))
-            ->line('We apologize for any inconvenience. Our chickens are working hard!');
+            ->line("We need to share something with you – our chickens are going through a tough period right now and aren't producing as many eggs as usual.")
+            ->line("Because of this, we had to slightly adjust your subscription order for this week:")
+            ->line("**Your usual order:** {$this->originalQuantity} eggs")
+            ->line("**This week's order:** {$this->newQuantity} eggs")
+            ->line("We know this isn't ideal, and we really appreciate your understanding. The girls are doing their best! 🐣")
+            ->line("Your subscription will automatically return to {$this->originalQuantity} eggs as soon as production picks back up.")
+            ->action('View Your Order', url('/'))
+            ->line('Thank you for being part of the Egg9 family!');
     }
 
     /**
@@ -55,11 +54,9 @@ class SubscriptionTrimmedNotification extends Notification implements ShouldQueu
      */
     public function toExpoPush(object $notifiable): array
     {
-        $reduction = $this->originalQuantity - $this->newQuantity;
-
         return [
-            'title' => '⚠️ Subscription Adjusted',
-            'body' => "Due to limited stock, your subscription was reduced from {$this->originalQuantity} to {$this->newQuantity} eggs this week ({$reduction} eggs less).",
+            'title' => '🐔 Order Adjusted This Week',
+            'body' => "Our chickens are having a slow week! Your order was adjusted from {$this->originalQuantity} to {$this->newQuantity} eggs. Thanks for understanding! 🐣",
         ];
     }
 }
