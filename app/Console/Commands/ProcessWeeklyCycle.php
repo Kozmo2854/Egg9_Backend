@@ -74,25 +74,29 @@ class ProcessWeeklyCycle extends Command
     }
 
     /**
-     * Move all existing weeks to the past (for testing with --force flag)
+     * Archive all existing weeks (for testing with --force flag)
+     * This closes all weeks but preserves historical data and orders
      */
     private function moveWeeksToPast()
     {
-        $this->warn('🧪 TESTING MODE: Moving all existing weeks to the past...');
+        $this->warn('🧪 TESTING MODE: Archiving all existing weeks...');
 
-        $allWeeks = Week::orderBy('week_start', 'desc')->get();
+        $allWeeks = Week::where('is_ordering_open', true)->get();
 
         if ($allWeeks->isEmpty()) {
-            $this->line('  No weeks to move');
+            $this->line('  No open weeks to archive');
             return;
         }
 
-        // Delete all existing weeks to avoid duplicate key violations
-        // In testing mode, we don't need to preserve old week data
-        $count = Week::count();
-        Week::query()->delete();
+        // Archive weeks by closing them - DO NOT DELETE (orders would be cascade deleted!)
+        foreach ($allWeeks as $week) {
+            $week->update([
+                'is_ordering_open' => false,
+            ]);
+            $this->line("  - Archived week starting {$week->week_start->format('Y-m-d')}");
+        }
         
-        $this->info("  ✓ Deleted {$count} existing week(s) to prepare for new week");
+        $this->info("  ✓ Archived {$allWeeks->count()} week(s) - all orders preserved");
     }
 
     /**

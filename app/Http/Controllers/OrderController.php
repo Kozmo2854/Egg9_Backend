@@ -196,7 +196,7 @@ class OrderController extends Controller
         $order->load('week');
 
         return response()->json([
-            'order' => $this->formatOrder($order),
+            'order' => $this->orderService->formatOrder($order),
         ], 201);
     }
 
@@ -370,7 +370,7 @@ class OrderController extends Controller
 
         return response()->json([
             'message' => 'Payment marked as submitted successfully',
-            'order' => $this->formatOrder($order),
+            'order' => $this->orderService->formatOrder($order),
         ]);
     }
 
@@ -410,11 +410,7 @@ class OrderController extends Controller
 
         return response()->json([
             'message' => 'Pickup confirmed successfully',
-            'order' => $this->formatOrder($order),
+            'order' => $this->orderService->formatOrder($order),
         ]);
     }
-
-    /**
-     * Format order data for API response
-     */
 }
