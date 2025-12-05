@@ -2,14 +2,71 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\AppSettings;
 use App\Models\Order;
 use App\Models\Subscription;
 use App\Models\Week;
 use Illuminate\Http\Request;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Validation\ValidationException;
 
 class SubscriptionController extends Controller
 {
+    /**
+     * Get subscription availability info
+     */
+    public function getAvailability(Request $request): JsonResponse
+    {
+        $week = Week::getCurrentWeek();
+        $settings = AppSettings::get();
+
+        if (!$week) {
+            return response()->json([
+                'canSubscribe' => false,
+                'reason' => 'no_week',
+                'message' => 'No week available for subscriptions',
+            ]);
+        }
+
+        // Check if low season
+        if ($week->is_low_season) {
+            return response()->json([
+                'canSubscribe' => false,
+                'reason' => 'low_season',
+                'message' => "It's a quieter time for our chickens right now, and they're laying fewer eggs than usual. Because of this, we're not accepting new subscriptions at the moment.",
+                'isLowSeason' => true,
+            ]);
+        }
+
+        // Check subscription capacity
+        $currentTotal = $settings->getTotalSubscriptionEggs();
+        $remaining = $settings->getRemainingSubscriptionCapacity();
+        $maxPerSub = $settings->max_per_subscription;
+
+        if ($remaining <= 0) {
+            return response()->json([
+                'canSubscribe' => false,
+                'reason' => 'capacity_full',
+                'message' => 'Subscription limit has been reached for this period. Please try again later or place a one-time order.',
+                'maxSubscriptionEggs' => $settings->max_subscription_eggs,
+                'currentTotal' => $currentTotal,
+            ]);
+        }
+
+        // Calculate max the user can subscribe to
+        $maxAllowed = min($remaining, $maxPerSub);
+
+        return response()->json([
+            'canSubscribe' => true,
+            'maxAllowed' => $maxAllowed,
+            'maxPerSubscription' => $maxPerSub,
+            'remainingCapacity' => $remaining,
+            'currentTotal' => $currentTotal,
+            'maxSubscriptionEggs' => $settings->max_subscription_eggs,
+            'isLowSeason' => false,
+        ]);
+    }
+
     /**
      * Get the user's active subscription
      */
@@ -46,8 +103,10 @@ class SubscriptionController extends Controller
      */
     public function store(Request $request)
     {
+        $settings = AppSettings::get();
+        
         $request->validate([
-            'quantity' => 'required|integer|min:10|max:30',
+            'quantity' => 'required|integer|min:10|max:' . $settings->max_per_subscription,
             'period' => 'required|integer|min:2|max:4',
             'start_next_week' => 'sometimes|boolean',
         ]);
@@ -64,6 +123,36 @@ class SubscriptionController extends Controller
         if (!$week) {
             return response()->json([
                 'message' => 'No week available for subscriptions',
+            ], 400);
+        }
+
+        // Check if low season - block new subscriptions
+        if ($week->is_low_season) {
+            return response()->json([
+                'message' => 'low_season',
+                'description' => "It's a quieter time for our chickens right now, and they're laying fewer eggs than usual. Because of this, we're not accepting new subscriptions at the moment.",
+            ], 400);
+        }
+
+        // Check subscription capacity
+        $remainingCapacity = $settings->getRemainingSubscriptionCapacity();
+        if ($request->quantity > $remainingCapacity) {
+            if ($remainingCapacity <= 0) {
+                return response()->json([
+                    'message' => 'subscription_capacity_full',
+                    'description' => 'Subscription limit has been reached. Please try again later or place a one-time order.',
+                    'maxSubscriptionEggs' => $settings->max_subscription_eggs,
+                    'currentTotal' => $settings->getTotalSubscriptionEggs(),
+                ], 400);
+            }
+            
+            // Partial capacity available
+            return response()->json([
+                'message' => 'subscription_capacity_partial',
+                'description' => "Only {$remainingCapacity} eggs available for new subscriptions.",
+                'availableCapacity' => $remainingCapacity,
+                'requestedQuantity' => $request->quantity,
+                'suggestion' => "You can subscribe to {$remainingCapacity} eggs maximum.",
             ], 400);
         }
 
@@ -91,13 +180,13 @@ class SubscriptionController extends Controller
             $availableEggs = $week->getAvailableEggsForUser(null);
             
             // If no stock available, offer to start next week
-        if ($request->quantity > $availableEggs) {
+            if ($request->quantity > $availableEggs) {
                 $nextWeekStart = now()->addWeek()->startOfWeek();
                 $nextWeekEnd = $nextWeekStart->copy()->addDays(6);
                 
-            return response()->json([
+                return response()->json([
                     'message' => 'insufficient_stock_this_week',
-                'availableEggs' => $availableEggs,
+                    'availableEggs' => $availableEggs,
                     'requiredEggs' => $request->quantity,
                     'nextWeekStart' => $nextWeekStart->toISOString(),
                     'nextWeekEnd' => $nextWeekEnd->toISOString(),

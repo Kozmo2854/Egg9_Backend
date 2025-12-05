@@ -50,6 +50,7 @@ Route::middleware('auth:sanctum')->group(function () {
 
     // Subscriptions (Customer)
     Route::get('/subscriptions/current', [SubscriptionController::class, 'getCurrent']);
+    Route::get('/subscriptions/availability', [SubscriptionController::class, 'getAvailability']);
     Route::post('/subscriptions', [SubscriptionController::class, 'store']);
     Route::delete('/subscriptions/{id}', [SubscriptionController::class, 'destroy']);
 
@@ -66,6 +67,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::put('/orders/{id}/confirm-payment', [AdminController::class, 'confirmPayment']);
         Route::post('/orders/mark-delivered', [AdminController::class, 'markAllOrdersDelivered']);
         Route::put('/week/current', [WeekController::class, 'updateCurrentWeek']);
+        Route::post('/week/subscription-preview', [WeekController::class, 'getSubscriptionPreview']);
         Route::put('/settings/price', [SettingsController::class, 'updatePrice']);
         Route::get('/settings/payment', [AdminController::class, 'getPaymentSettings']);
         Route::put('/settings/payment', [AdminController::class, 'updatePaymentSettings']);

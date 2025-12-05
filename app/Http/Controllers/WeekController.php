@@ -5,13 +5,15 @@ namespace App\Http\Controllers;
 use App\Models\Week;
 use App\Models\AppSettings;
 use App\Services\PushNotificationService;
+use App\Services\SeasonSubscriptionService;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 
 class WeekController extends Controller
 {
     public function __construct(
-        private PushNotificationService $pushService
+        private PushNotificationService $pushService,
+        private SeasonSubscriptionService $subscriptionService
     ) {}
     /**
      * Get current week's information
@@ -62,6 +64,7 @@ class WeekController extends Controller
             'price_per_dozen' => 'sometimes|numeric|min:0|max:999999.99',
             'delivery_date' => 'nullable|date',
             'delivery_time' => 'nullable|string|max:255',
+            'is_low_season' => 'sometimes|boolean',
         ]);
 
         $week = Week::getCurrentWeek();
@@ -74,6 +77,7 @@ class WeekController extends Controller
 
         $previousAvailableEggs = $week->available_eggs;
         $previousDeliveryDate = $week->delivery_date;
+        $subscriptionsProcessed = $week->subscriptions_processed;
 
         if ($request->has('available_eggs')) {
             $week->available_eggs = $request->input('available_eggs');
@@ -95,7 +99,18 @@ class WeekController extends Controller
             $week->delivery_time = $request->input('delivery_time');
         }
 
+        if ($request->has('is_low_season')) {
+            $week->is_low_season = $request->input('is_low_season');
+        }
+
         $week->save();
+
+        // Process subscriptions when stock is first set (regardless of season)
+        // Subscriptions are always honored, just can't create NEW ones in low season
+        $subscriptionResult = null;
+        if (!$subscriptionsProcessed && $week->available_eggs > 0) {
+            $subscriptionResult = $this->subscriptionService->processSubscriptionsForWeek($week);
+        }
 
         // Send notifications for relevant changes
         // Stock available: only when setting stock for the first time (was 0, now > 0)
@@ -108,10 +123,32 @@ class WeekController extends Controller
             $this->pushService->notifyDeliveryScheduled($week);
         }
 
-        return response()->json([
+        $response = [
             'message' => 'Week updated successfully',
             'week' => $this->formatWeek($week),
+        ];
+
+        if ($subscriptionResult) {
+            $response['subscriptions'] = $subscriptionResult;
+        }
+
+        return response()->json($response);
+    }
+
+    /**
+     * Get subscription preview before processing (Admin only)
+     */
+    public function getSubscriptionPreview(Request $request): JsonResponse
+    {
+        $request->validate([
+            'available_eggs' => 'required|integer|min:0',
         ]);
+
+        $preview = $this->subscriptionService->getSubscriptionPreview(
+            $request->input('available_eggs')
+        );
+
+        return response()->json($preview);
     }
 
     /**
@@ -157,6 +194,9 @@ class WeekController extends Controller
             'deliveryDate' => $week->delivery_date ? $week->delivery_date->toISOString() : null,
             'deliveryTime' => $week->delivery_time,
             'allOrdersDelivered' => $week->all_orders_delivered,
+            'isLowSeason' => $week->is_low_season,
+            'subscriptionsProcessed' => $week->subscriptions_processed,
+            'lowSeasonOrderCap' => $week->getLowSeasonOrderCap(),
         ];
     }
 }

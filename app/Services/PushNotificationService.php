@@ -6,6 +6,7 @@ use App\Jobs\Notifications\DeliveryScheduledNotification;
 use App\Jobs\Notifications\OrderDeliveredNotification;
 use App\Jobs\Notifications\PaymentReminderNotification;
 use App\Jobs\Notifications\StockAvailableNotification;
+use App\Jobs\Notifications\SubscriptionTrimmedNotification;
 use App\Models\Week;
 use Illuminate\Support\Facades\Log;
 
@@ -59,6 +60,24 @@ class PushNotificationService
     {
         Log::info('Dispatching payment reminder notifications');
         PaymentReminderNotification::dispatch();
+    }
+
+    /**
+     * Notify a user that their subscription was trimmed due to limited stock
+     *
+     * @param int $userId The user to notify
+     * @param int $originalQuantity Original subscription quantity
+     * @param int $newQuantity New (reduced) quantity
+     * @return void
+     */
+    public function notifySubscriptionTrimmed(int $userId, int $originalQuantity, int $newQuantity): void
+    {
+        Log::info('Dispatching subscription trimmed notification', [
+            'user_id' => $userId,
+            'original' => $originalQuantity,
+            'new' => $newQuantity,
+        ]);
+        SubscriptionTrimmedNotification::dispatch($userId, $originalQuantity, $newQuantity);
     }
 }
 

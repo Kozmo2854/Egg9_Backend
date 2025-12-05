@@ -21,6 +21,8 @@ class Week extends Model
         'delivery_date',
         'delivery_time',
         'all_orders_delivered',
+        'is_low_season',
+        'subscriptions_processed',
     ];
 
     protected $casts = [
@@ -30,6 +32,8 @@ class Week extends Model
         'price_per_dozen' => 'decimal:2',
         'is_ordering_open' => 'boolean',
         'all_orders_delivered' => 'boolean',
+        'is_low_season' => 'boolean',
+        'subscriptions_processed' => 'boolean',
     ];
 
     /**
@@ -84,6 +88,27 @@ class Week extends Model
         }
 
         return max(0, $available);
+    }
+
+    /**
+     * Get the maximum allowed eggs for one-time orders in low season
+     * Returns null if high season (no cap)
+     */
+    public function getLowSeasonOrderCap(): ?int
+    {
+        if (!$this->is_low_season) {
+            return null; // No cap in high season
+        }
+
+        return $this->available_eggs < 120 ? 20 : 30;
+    }
+
+    /**
+     * Check if one-time orders should be capped
+     */
+    public function hasOrderCap(): bool
+    {
+        return $this->is_low_season;
     }
 }
 

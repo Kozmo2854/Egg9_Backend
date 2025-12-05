@@ -129,6 +129,18 @@ class OrderController extends Controller
             ], 400);
         }
 
+        // Check low season order cap
+        $lowSeasonCap = $week->getLowSeasonOrderCap();
+        if ($lowSeasonCap !== null && $request->quantity > $lowSeasonCap) {
+            return response()->json([
+                'message' => 'low_season_cap',
+                'description' => "During low season, one-time orders are limited to {$lowSeasonCap} eggs maximum.",
+                'maxAllowed' => $lowSeasonCap,
+                'requestedQuantity' => $request->quantity,
+                'isLowSeason' => true,
+            ], 400);
+        }
+
         // Check if user already has a one-time order for this week
         // Note: Users can have both a subscription order AND a one-time order
         $existingOrder = Order::where('user_id', $request->user()->id)
@@ -228,6 +240,20 @@ class OrderController extends Controller
             return response()->json([
                 'message' => 'Ordering is closed for this week',
             ], 400);
+        }
+
+        // Check low season order cap (only for one-time orders, not subscription orders)
+        if (!$order->subscription_id) {
+            $lowSeasonCap = $week->getLowSeasonOrderCap();
+            if ($lowSeasonCap !== null && $request->quantity > $lowSeasonCap) {
+                return response()->json([
+                    'message' => 'low_season_cap',
+                    'description' => "During low season, one-time orders are limited to {$lowSeasonCap} eggs maximum.",
+                    'maxAllowed' => $lowSeasonCap,
+                    'requestedQuantity' => $request->quantity,
+                    'isLowSeason' => true,
+                ], 400);
+            }
         }
 
         // Check available eggs (including user's current order)

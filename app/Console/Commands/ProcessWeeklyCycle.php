@@ -2,8 +2,6 @@
 
 namespace App\Console\Commands;
 
-use App\Models\Order;
-use App\Models\Subscription;
 use App\Models\Week;
 use App\Models\AppSettings;
 use Illuminate\Console\Command;
@@ -53,8 +51,9 @@ class ProcessWeeklyCycle extends Command
             // Step 2: Create new week
             $newWeek = $this->createNewWeek();
 
-            // Step 3: Process active subscriptions
-            $this->processSubscriptions($newWeek);
+            // Note: Subscriptions are now processed when admin sets stock
+            // This allows admin to see preview and control the process
+            $this->info('Step 3: Subscriptions will be processed when admin sets stock');
 
             DB::commit();
 
@@ -153,67 +152,5 @@ class ProcessWeeklyCycle extends Command
         $this->line("  Price per dozen: \${$pricePerDozen}");
 
         return $newWeek;
-    }
-
-    /**
-     * Process all active subscriptions
-     */
-    private function processSubscriptions(Week $newWeek)
-    {
-        $this->info('Step 3: Processing active subscriptions...');
-
-        $activeSubscriptions = Subscription::where('status', 'active')->get();
-
-        if ($activeSubscriptions->isEmpty()) {
-            $this->line('  No active subscriptions to process');
-            return;
-        }
-
-        $successCount = 0;
-        $failureCount = 0;
-
-        foreach ($activeSubscriptions as $subscription) {
-            try {
-                // Create order for this subscription
-                $order = Order::create([
-                    'user_id' => $subscription->user_id,
-                    'subscription_id' => $subscription->id,
-                    'week_id' => $newWeek->id,
-                    'quantity' => $subscription->quantity,
-                    'total' => Order::calculateTotal($subscription->quantity, $newWeek->price_per_dozen),
-                    'status' => 'pending',
-                    'is_paid' => false,
-                ]);
-
-                // Decrement weeks remaining
-                $subscription->weeks_remaining--;
-
-                // Update next delivery date
-                $subscription->next_delivery = now()->addWeek()->startOfWeek();
-
-                // If no weeks remaining, mark as completed
-                if ($subscription->weeks_remaining <= 0) {
-                    $subscription->status = 'completed';
-                    $this->line("  ✓ Subscription #{$subscription->id} (User #{$subscription->user_id}) completed");
-                } else {
-                    $this->line("  ✓ Created order #{$order->id} for subscription #{$subscription->id} (User #{$subscription->user_id})");
-                }
-
-                $subscription->save();
-                $successCount++;
-            } catch (\Exception $e) {
-                $failureCount++;
-                $this->error("  ✗ Failed to process subscription #{$subscription->id}: {$e->getMessage()}");
-                Log::error("Failed to process subscription #{$subscription->id}", [
-                    'subscription_id' => $subscription->id,
-                    'error' => $e->getMessage(),
-                ]);
-            }
-        }
-
-        $this->info("  Processed {$successCount} subscription(s) successfully");
-        if ($failureCount > 0) {
-            $this->warn("  Failed to process {$failureCount} subscription(s)");
-        }
     }
 }

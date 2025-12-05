@@ -47,13 +47,21 @@ abstract class BaseNotificationJob implements ShouldQueue
 
         // Expo allows up to 100 tokens per request
         foreach (array_chunk($tokens, 100) as $batch) {
-            $messages = array_map(fn($token) => [
-                'to' => $token,
-                'title' => $title,
-                'body' => $body,
-                'sound' => 'default',
-                'data' => $data,
-            ], $batch);
+            $messages = array_map(function($token) use ($title, $body, $data) {
+                $message = [
+                    'to' => $token,
+                    'title' => $title,
+                    'body' => $body,
+                    'sound' => 'default',
+                ];
+                
+                // Only add data if not empty (Expo expects object, not array)
+                if (!empty($data)) {
+                    $message['data'] = (object) $data;
+                }
+                
+                return $message;
+            }, $batch);
 
             try {
                 $response = Http::post($this->expoPushUrl, $messages);
