@@ -136,11 +136,45 @@ Copy `.env.example` and configure database credentials.
 | `FRONTEND_URL` | Frontend URL for CORS | `https://egg9frontend-production.up.railway.app` |
 | `QUEUE_CONNECTION` | Queue driver (use `sync` for immediate processing) | `sync` |
 | `CRON_SECRET` | Secret token for cron endpoint authentication | `your-secure-random-string` |
+| `MAIL_PASSWORD` | Gmail App Password for email notifications | `your-16-char-app-password` |
 
 **Notes:**
 - Railway auto-provides MySQL credentials (`DB_HOST`, `DB_PORT`, `DB_DATABASE`, `DB_USERNAME`, `DB_PASSWORD`)
 - `QUEUE_CONNECTION=sync` is **required** for push notifications to work without a queue worker
 - `CRON_SECRET` is required for the weekly cycle cron job endpoint
+
+## Email & Push Notifications
+
+Egg9 uses Laravel Notifications for both email and push notifications. Users receive:
+- Stock available notifications
+- Order delivered notifications
+- Delivery scheduled notifications
+- Payment reminders (day after delivery)
+- Subscription adjustment notifications
+
+### Gmail SMTP Setup
+
+1. Create a Gmail account for the app (e.g., `egg9nine@gmail.com`)
+2. Enable 2-Factor Authentication on the account
+3. Generate an App Password: https://myaccount.google.com/apppasswords
+4. Configure environment variables:
+
+```env
+MAIL_MAILER=smtp
+MAIL_HOST=smtp.gmail.com
+MAIL_PORT=587
+MAIL_USERNAME=egg9nine@gmail.com
+MAIL_PASSWORD=your-app-password
+MAIL_ENCRYPTION=tls
+MAIL_FROM_ADDRESS=egg9nine@gmail.com
+MAIL_FROM_NAME=Egg9
+```
+
+### Push Notifications
+
+Push notifications use Expo Push API. Mobile users automatically register their push tokens on login.
+
+**Stale Token Cleanup:** Tokens are automatically removed when Expo returns `DeviceNotRegistered` errors.
 
 ## Deployment
 

@@ -4,7 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Week;
 use App\Models\AppSettings;
-use App\Services\PushNotificationService;
+use App\Services\NotificationService;
 use App\Services\SeasonSubscriptionService;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
@@ -12,7 +12,7 @@ use Illuminate\Http\JsonResponse;
 class WeekController extends Controller
 {
     public function __construct(
-        private PushNotificationService $pushService,
+        private NotificationService $notificationService,
         private SeasonSubscriptionService $subscriptionService
     ) {}
     /**
@@ -115,12 +115,12 @@ class WeekController extends Controller
         // Send notifications for relevant changes
         // Stock available: only when setting stock for the first time (was 0, now > 0)
         if ($previousAvailableEggs == 0 && $week->available_eggs > 0) {
-            $this->pushService->notifyStockAvailable($week);
+            $this->notificationService->notifyStockAvailable($week);
         }
 
         // Delivery scheduled: only when setting delivery date for the first time
         if (!$previousDeliveryDate && $week->delivery_date) {
-            $this->pushService->notifyDeliveryScheduled($week);
+            $this->notificationService->notifyDeliveryScheduled($week);
         }
 
         $response = [
@@ -171,7 +171,7 @@ class WeekController extends Controller
         $week->orders()->where('status', 'approved')->update(['status' => 'completed']);
 
         // Notify users that their orders have been delivered
-        $this->pushService->notifyOrderDelivered($week);
+        $this->notificationService->notifyOrderDelivered($week);
 
         return response()->json([
             'message' => 'All orders marked as delivered',

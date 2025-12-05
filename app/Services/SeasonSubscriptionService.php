@@ -5,14 +5,14 @@ namespace App\Services;
 use App\Models\Order;
 use App\Models\Subscription;
 use App\Models\Week;
-use App\Services\PushNotificationService;
+use App\Services\NotificationService;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
 class SeasonSubscriptionService
 {
     public function __construct(
-        protected PushNotificationService $pushService
+        protected NotificationService $notificationService
     ) {}
 
     /**
@@ -155,7 +155,7 @@ class SeasonSubscriptionService
      */
     private function notifyUserOfTrim(int $userId, int $originalQuantity, int $newQuantity): void
     {
-        $this->pushService->notifySubscriptionTrimmed($userId, $originalQuantity, $newQuantity);
+        $this->notificationService->notifySubscriptionTrimmed($userId, $originalQuantity, $newQuantity);
     }
 
     /**

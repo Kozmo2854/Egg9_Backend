@@ -2,7 +2,7 @@
 
 namespace App\Http\Controllers;
 
-use App\Services\PushNotificationService;
+use App\Services\NotificationService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Log;
@@ -10,7 +10,7 @@ use Illuminate\Support\Facades\Log;
 class CronController extends Controller
 {
     public function __construct(
-        private PushNotificationService $pushService
+        private NotificationService $notificationService
     ) {}
     /**
      * Process weekly cycle (triggered by external cron)
@@ -94,7 +94,7 @@ class CronController extends Controller
         try {
             Log::info('Sending payment reminder notifications via cron endpoint');
             
-            $this->pushService->notifyPaymentReminder();
+            $this->notificationService->notifyPaymentReminder();
             
             Log::info('Payment reminders sent successfully');
             
