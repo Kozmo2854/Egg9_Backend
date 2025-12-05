@@ -92,6 +92,24 @@ class OrderController extends Controller
     }
 
     /**
+     * Get all unpaid delivered orders for the authenticated user
+     * Used for showing outstanding orders on home screen
+     */
+    public function getUnpaidOrders(Request $request)
+    {
+        $orders = Order::where('user_id', $request->user()->id)
+            ->where('is_paid', false)
+            ->where('status', 'delivered')
+            ->with('week')
+            ->orderBy('created_at', 'desc')
+            ->get();
+
+        return response()->json([
+            'orders' => $orders->map(fn($order) => $this->orderService->formatOrder($order)),
+        ]);
+    }
+
+    /**
      * Create a new order for the current week
      */
     public function store(Request $request)

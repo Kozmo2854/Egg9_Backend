@@ -10,7 +10,6 @@ use App\Notifications\OrderDeliveredNotification;
 use App\Notifications\PaymentReminderNotification;
 use App\Notifications\StockAvailableNotification;
 use App\Notifications\SubscriptionTrimmedNotification;
-use Carbon\Carbon;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Notification;
 
@@ -88,21 +87,19 @@ class NotificationService
     }
 
     /**
-     * Send payment reminders to users with unpaid orders (delivered yesterday)
+     * Send payment reminders to users with unpaid delivered orders
      */
     public function notifyPaymentReminder(): void
     {
         Log::info('Processing payment reminder notifications');
 
-        $yesterday = Carbon::yesterday()->toDateString();
-
-        // Find orders delivered yesterday that are still unpaid
-        $unpaidOrders = Order::whereHas('week', function ($query) use ($yesterday) {
-                $query->whereDate('delivery_date', $yesterday);
+        // Find unpaid delivered orders from weeks where delivery has happened
+        $unpaidOrders = Order::whereHas('week', function ($query) {
+                $query->where('all_orders_delivered', true);
             })
             ->where('is_paid', false)
             ->where('status', 'delivered')
-            ->with('user')
+            ->with(['user', 'week'])
             ->get();
 
         if ($unpaidOrders->isEmpty()) {
@@ -114,7 +111,8 @@ class NotificationService
             if ($order->user && $order->user->role !== 'admin') {
                 $order->user->notify(new PaymentReminderNotification(
                     $order->quantity,
-                    $order->total
+                    $order->total,
+                    $order->week->week_start
                 ));
             }
         }

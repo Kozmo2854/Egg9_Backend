@@ -40,6 +40,7 @@ Route::middleware('auth:sanctum')->group(function () {
 
     // Orders (Customer)
     Route::get('/orders', [OrderController::class, 'index']);
+    Route::get('/orders/unpaid', [OrderController::class, 'getUnpaidOrders']);
     Route::post('/orders', [OrderController::class, 'store']);
     Route::get('/orders/current-week', [OrderController::class, 'getCurrentWeekOrder']);
     Route::get('/orders/current-week-subscription', [OrderController::class, 'getCurrentWeekSubscriptionOrder']);

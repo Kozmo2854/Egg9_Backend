@@ -3,6 +3,7 @@
 namespace App\Notifications;
 
 use App\Channels\ExpoPushChannel;
+use Carbon\Carbon;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Notifications\Messages\MailMessage;
@@ -14,7 +15,8 @@ class PaymentReminderNotification extends Notification implements ShouldQueue
 
     public function __construct(
         public int $quantity,
-        public float $total
+        public float $total,
+        public Carbon $weekStart
     ) {}
 
     /**
@@ -37,12 +39,13 @@ class PaymentReminderNotification extends Notification implements ShouldQueue
     public function toMail(object $notifiable): MailMessage
     {
         $totalFormatted = number_format($this->total, 0);
+        $weekDate = $this->weekStart->format('F j, Y');
 
         return (new MailMessage)
             ->subject('🐔 Quick Reminder About Your Eggs!')
             ->greeting("Hi {$notifiable->name}!")
             ->line("Just a friendly nudge – we noticed your egg order hasn't been paid yet! 🥚")
-            ->line("**Your order:**")
+            ->line("**Your order from week of {$weekDate}:**")
             ->line("• {$this->quantity} eggs")
             ->line("• **{$totalFormatted} RSD**")
             ->line("No rush, but our chickens would appreciate it when you get a chance! 😊")
@@ -55,9 +58,11 @@ class PaymentReminderNotification extends Notification implements ShouldQueue
      */
     public function toExpoPush(object $notifiable): array
     {
+        $weekDate = $this->weekStart->format('M j');
+        
         return [
             'title' => '🐔 Quick Reminder!',
-            'body' => "Don't forget about your eggs! Payment still pending 🥚",
+            'body' => "Your order from {$weekDate} ({$this->quantity} eggs) is still unpaid 🥚",
         ];
     }
 }
