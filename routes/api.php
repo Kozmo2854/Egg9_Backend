@@ -24,12 +24,20 @@ Route::post('/register', [AuthController::class, 'register']);
 // Cron Routes (Public but secured with CRON_SECRET)
 Route::post('/cron/process-weekly-cycle', [CronController::class, 'processWeeklyCycle']);
 Route::post('/cron/payment-reminder', [CronController::class, 'sendPaymentReminders']);
+Route::post('/cron/pickup-reminder', [CronController::class, 'sendPickupReminders']);
 
 // Protected Routes
 Route::middleware('auth:sanctum')->group(function () {
     // Auth
     Route::post('/logout', [AuthController::class, 'logout']);
     Route::get('/user', [AuthController::class, 'user']);
+    
+    // User Profile Management
+    Route::patch('/user/profile', [AuthController::class, 'updateProfile']);
+    Route::patch('/user/email', [AuthController::class, 'updateEmail']);
+    Route::patch('/user/password', [AuthController::class, 'updatePassword']);
+    Route::patch('/user/notifications', [AuthController::class, 'updateNotifications']);
+    Route::delete('/user', [AuthController::class, 'deleteAccount']);
 
     // Week Information
     Route::get('/week/current', [WeekController::class, 'getCurrentWeek']);

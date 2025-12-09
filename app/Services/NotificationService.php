@@ -8,6 +8,7 @@ use App\Models\Week;
 use App\Notifications\DeliveryScheduledNotification;
 use App\Notifications\OrderDeliveredNotification;
 use App\Notifications\PaymentReminderNotification;
+use App\Notifications\PickupReminderNotification;
 use App\Notifications\StockAvailableNotification;
 use App\Notifications\SubscriptionTrimmedNotification;
 use Illuminate\Support\Facades\Log;
@@ -139,6 +140,44 @@ class NotificationService
         }
 
         $user->notify(new SubscriptionTrimmedNotification($originalQuantity, $newQuantity));
+    }
+
+    /**
+     * Send pickup reminders to users with delivered but not picked up orders from previous weeks
+     */
+    public function notifyPickupReminder(): void
+    {
+        Log::info('Processing pickup reminder notifications');
+
+        // Find delivered orders that haven't been picked up from previous weeks
+        $currentWeek = Week::getCurrentWeek();
+        
+        $unpickedOrders = Order::whereHas('week', function ($query) use ($currentWeek) {
+                $query->where('all_orders_delivered', true);
+                if ($currentWeek) {
+                    $query->where('id', '!=', $currentWeek->id);
+                }
+            })
+            ->where('status', 'delivered')
+            ->where('picked_up', false)
+            ->with(['user', 'week'])
+            ->get();
+
+        if ($unpickedOrders->isEmpty()) {
+            Log::info('No unpicked orders found for pickup reminder');
+            return;
+        }
+
+        foreach ($unpickedOrders as $order) {
+            if ($order->user && $order->user->role !== 'admin') {
+                $order->user->notify(new PickupReminderNotification(
+                    $order->quantity,
+                    $order->week->week_start
+                ));
+            }
+        }
+
+        Log::info('Pickup reminder notifications sent', ['order_count' => $unpickedOrders->count()]);
     }
 }
 

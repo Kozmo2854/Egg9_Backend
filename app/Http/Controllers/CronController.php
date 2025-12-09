@@ -117,5 +117,55 @@ class CronController extends Controller
             ], 500);
         }
     }
+
+    /**
+     * Send pickup reminder notifications (triggered by external cron, Mondays)
+     * 
+     * Security: Requires CRON_SECRET token in Authorization header
+     */
+    public function sendPickupReminders(Request $request)
+    {
+        // Verify cron secret token
+        $cronSecret = env('CRON_SECRET');
+        $authHeader = $request->header('Authorization');
+        
+        if (!$cronSecret || $authHeader !== "Bearer {$cronSecret}") {
+            Log::warning('Unauthorized pickup reminder cron attempt', [
+                'ip' => $request->ip(),
+                'user_agent' => $request->userAgent(),
+            ]);
+            
+            return response()->json([
+                'success' => false,
+                'message' => 'Unauthorized',
+            ], 401);
+        }
+
+        try {
+            Log::info('Sending pickup reminder notifications via cron endpoint');
+            
+            $this->notificationService->notifyPickupReminder();
+            
+            Log::info('Pickup reminders sent successfully');
+            
+            return response()->json([
+                'success' => true,
+                'message' => 'Pickup reminders sent successfully',
+                'timestamp' => now()->toDateTimeString(),
+            ], 200);
+            
+        } catch (\Exception $e) {
+            Log::error('Pickup reminder notifications failed', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+            
+            return response()->json([
+                'success' => false,
+                'message' => 'Pickup reminders failed',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
+    }
 }
 

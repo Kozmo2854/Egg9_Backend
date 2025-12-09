@@ -31,6 +31,7 @@ class OrderService
             'paymentSubmitted' => $order->payment_submitted,
             'pickedUp' => $order->picked_up,
             'weekStart' => $order->week->week_start->toISOString(),
+            'weekEnd' => $order->week->week_end->toISOString(),
             'createdAt' => $order->created_at->toISOString(),
             'updatedAt' => $order->updated_at->toISOString(),
         ];
