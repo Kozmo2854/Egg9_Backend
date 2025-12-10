@@ -23,6 +23,7 @@ class OrderService
             'id' => $order->id,
             'userId' => $order->user_id,
             'subscriptionId' => $order->subscription_id,
+            'type' => $order->subscription_id ? 'subscription' : 'one-time',
             'weekId' => $order->week_id,
             'quantity' => $order->quantity,
             'total' => (float) $order->total,

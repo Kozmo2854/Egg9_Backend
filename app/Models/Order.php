@@ -66,8 +66,8 @@ class Order extends Model
      */
     public function canBeModified(): bool
     {
-        // Orders can only be modified if they are pending AND not paid
-        return $this->status === 'pending' && !$this->is_paid;
+        // Orders can only be modified if they are pending AND not paid AND payment not submitted
+        return $this->status === 'pending' && !$this->is_paid && !$this->payment_submitted;
     }
 
     /**
