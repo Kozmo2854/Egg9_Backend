@@ -346,8 +346,8 @@ $order->checkAndUpdateCompletion();
 
 ## References
 
-- Main README: `README.md` - Project setup and API documentation
+- Main README: `README.md` - Project setup, Docker, API documentation
 - Testing Guide: `TESTING.md` - Test suite overview
-- Docker Setup: `DOCKER_SETUP.md` - Container configuration
+- Business Logic: `../.ai-context/BUSINESS_LOGIC.md` - Business rules
 - API Collection: `Egg9_API.postman_collection.json` - Import for testing
 
