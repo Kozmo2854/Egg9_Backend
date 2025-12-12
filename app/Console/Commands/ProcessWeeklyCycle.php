@@ -74,29 +74,41 @@ class ProcessWeeklyCycle extends Command
     }
 
     /**
-     * Archive all existing weeks (for testing with --force flag)
-     * This closes all weeks but preserves historical data and orders
+     * Move all existing weeks to the past (for testing with --force flag)
+     * This shifts week dates to past weeks so a new current week can be created
      */
     private function moveWeeksToPast()
     {
-        $this->warn('🧪 TESTING MODE: Archiving all existing weeks...');
+        $this->warn('🧪 TESTING MODE: Moving all existing weeks to the past...');
 
-        $allWeeks = Week::where('is_ordering_open', true)->get();
+        $allWeeks = Week::all();
 
         if ($allWeeks->isEmpty()) {
-            $this->line('  No open weeks to archive');
+            $this->line('  No weeks to move');
             return;
         }
 
-        // Archive weeks by closing them - DO NOT DELETE (orders would be cascade deleted!)
-        foreach ($allWeeks as $week) {
+        // Move each week back by the number of weeks needed to clear the current week slot
+        $currentWeekStart = now()->startOfWeek();
+        
+        foreach ($allWeeks as $index => $week) {
+            // Calculate how many weeks to shift back (at least 1 week before current)
+            $weeksToShift = $index + 1;
+            $newWeekStart = $currentWeekStart->copy()->subWeeks($weeksToShift);
+            $newWeekEnd = $newWeekStart->copy()->addDays(6);
+            
+            $oldStart = $week->week_start->format('Y-m-d');
+            
             $week->update([
+                'week_start' => $newWeekStart,
+                'week_end' => $newWeekEnd,
                 'is_ordering_open' => false,
             ]);
-            $this->line("  - Archived week starting {$week->week_start->format('Y-m-d')}");
+            
+            $this->line("  - Moved week {$oldStart} → {$newWeekStart->format('Y-m-d')}");
         }
         
-        $this->info("  ✓ Archived {$allWeeks->count()} week(s) - all orders preserved");
+        $this->info("  ✓ Moved {$allWeeks->count()} week(s) to the past");
     }
 
     /**
