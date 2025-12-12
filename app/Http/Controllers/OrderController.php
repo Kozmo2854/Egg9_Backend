@@ -368,7 +368,10 @@ class OrderController extends Controller
             ], 400);
         }
 
-        $order->update(['payment_submitted' => true]);
+        $order->update([
+            'payment_submitted' => true,
+            'payment_submitted_at' => now(),
+        ]);
 
         return response()->json([
             'message' => 'Payment marked as submitted successfully',

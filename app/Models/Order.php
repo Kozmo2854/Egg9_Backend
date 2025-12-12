@@ -17,16 +17,16 @@ class Order extends Model
         'total',
         'status',
         'is_paid',
-        'payment_confirmed_at',
         'payment_submitted',
+        'payment_submitted_at',
         'picked_up',
     ];
 
     protected $casts = [
         'total' => 'decimal:2',
         'is_paid' => 'boolean',
-        'payment_confirmed_at' => 'datetime',
         'payment_submitted' => 'boolean',
+        'payment_submitted_at' => 'datetime',
         'picked_up' => 'boolean',
     ];
 
