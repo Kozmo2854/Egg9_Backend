@@ -97,8 +97,10 @@ class OrderController extends Controller
      */
     public function getUnpaidOrders(Request $request)
     {
+        // Outstanding = delivered, not paid, AND not yet marked as paid by user
         $orders = Order::where('user_id', $request->user()->id)
             ->where('is_paid', false)
+            ->where('payment_submitted', false)
             ->where('status', 'delivered')
             ->with('week')
             ->orderBy('created_at', 'desc')
