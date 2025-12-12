@@ -187,7 +187,10 @@ class AdminController extends Controller
             ], 404);
         }
 
-        $order->update(['is_paid' => true]);
+        $order->update([
+            'is_paid' => true,
+            'payment_confirmed_at' => now(),
+        ]);
         
         // Check if order is now complete (delivered + paid + picked up)
         $order->refresh();

@@ -29,6 +29,7 @@ class OrderService
             'total' => (float) $order->total,
             'status' => $order->status,
             'isPaid' => $order->is_paid,
+            'paymentConfirmedAt' => $order->payment_confirmed_at?->toISOString(),
             'paymentSubmitted' => $order->payment_submitted,
             'pickedUp' => $order->picked_up,
             'weekStart' => $order->week->week_start->toISOString(),

@@ -17,6 +17,7 @@ class Order extends Model
         'total',
         'status',
         'is_paid',
+        'payment_confirmed_at',
         'payment_submitted',
         'picked_up',
     ];
@@ -24,6 +25,7 @@ class Order extends Model
     protected $casts = [
         'total' => 'decimal:2',
         'is_paid' => 'boolean',
+        'payment_confirmed_at' => 'datetime',
         'payment_submitted' => 'boolean',
         'picked_up' => 'boolean',
     ];
