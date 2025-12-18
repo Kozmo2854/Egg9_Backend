@@ -26,21 +26,23 @@ class PickupReminderNotification extends Notification implements ShouldQueue
 
     /**
      * Get the notification's delivery channels.
+     * Push notifications are sent first to ensure delivery even if mail fails.
      *
      * @return array<int, string>
      */
     public function via(object $notifiable): array
     {
         $channels = [];
-        
-        if ($notifiable->email_notifications_enabled) {
-            $channels[] = 'mail';
-        }
-        
+
+        // Push first - so it succeeds even if mail fails later
         if ($notifiable->push_notifications_enabled && $notifiable->pushToken) {
             $channels[] = \App\Channels\ExpoPushChannel::class;
         }
-        
+
+        if ($notifiable->email_notifications_enabled) {
+            $channels[] = 'mail';
+        }
+
         return $channels;
     }
 
