@@ -201,9 +201,12 @@ class SubscriptionController extends Controller
             ->get();
             
         foreach ($oldSubscriptions as $oldSub) {
-            // Delete pending orders from old subscription
+            // Delete only UNPAID pending orders from old subscription
+            // Paid orders should still be delivered even after cancellation
             Order::where('subscription_id', $oldSub->id)
                 ->where('status', 'pending')
+                ->where('is_paid', false)
+                ->where('payment_submitted', false)
                 ->delete();
             
             // Cancel the subscription
@@ -285,9 +288,12 @@ class SubscriptionController extends Controller
             ], 400);
         }
 
-        // Delete all pending orders associated with this subscription
+        // Delete only UNPAID pending orders associated with this subscription
+        // Paid orders (or orders with payment submitted) should still be delivered
         Order::where('subscription_id', $subscription->id)
             ->where('status', 'pending')
+            ->where('is_paid', false)
+            ->where('payment_submitted', false)
             ->delete();
 
         $subscription->update(['status' => 'cancelled']);
