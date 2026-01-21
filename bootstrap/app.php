@@ -26,5 +26,13 @@ return Application::configure(basePath: dirname(__DIR__))
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
-        //
+        // Log all exceptions with full context
+        $exceptions->report(function (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::error('Exception caught', [
+                'message' => $e->getMessage(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+        });
     })->create();
