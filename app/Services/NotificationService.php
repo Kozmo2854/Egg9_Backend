@@ -24,10 +24,18 @@ class NotificationService
      */
     public function notifyStockAvailable(Week $week): void
     {
+        // #region agent log
+        Log::debug('DEBUG: notifyStockAvailable START', ['week_id' => $week->id]);
+        // #endregion
+
         Log::info('Sending stock available notification', ['week_id' => $week->id]);
 
         // Get all non-admin users
         $users = User::where('role', '!=', 'admin')->get();
+
+        // #region agent log
+        Log::debug('DEBUG: found users', ['count' => $users->count()]);
+        // #endregion
 
         if ($users->isEmpty()) {
             Log::info('No users to notify about stock availability');
@@ -38,17 +46,30 @@ class NotificationService
         $failCount = 0;
 
         foreach ($users as $user) {
+            // #region agent log
+            Log::debug('DEBUG: notifying user', ['user_id' => $user->id, 'email' => $user->email, 'push_enabled' => $user->push_notifications_enabled, 'email_enabled' => $user->email_notifications_enabled]);
+            // #endregion
             try {
                 $user->notify(new StockAvailableNotification($week));
                 $successCount++;
+                // #region agent log
+                Log::debug('DEBUG: user notify OK', ['user_id' => $user->id]);
+                // #endregion
             } catch (\Exception $e) {
                 $failCount++;
+                // #region agent log
+                Log::debug('DEBUG: user notify FAILED', ['user_id' => $user->id, 'error' => $e->getMessage()]);
+                // #endregion
                 Log::error('Failed to send stock notification to user', [
                     'user_id' => $user->id,
                     'error' => $e->getMessage(),
                 ]);
             }
         }
+
+        // #region agent log
+        Log::debug('DEBUG: notifyStockAvailable END', ['success' => $successCount, 'failed' => $failCount]);
+        // #endregion
 
         Log::info('Stock available notifications completed', [
             'success' => $successCount,

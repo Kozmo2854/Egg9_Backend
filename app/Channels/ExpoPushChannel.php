@@ -62,8 +62,14 @@ class ExpoPushChannel
         }
 
         try {
-            $response = Http::post($this->expoPushUrl, $message);
+            // #region agent log
+            Log::debug('ExpoPush: sending to user', ['user_id' => $userId, 'token_prefix' => substr($token, 0, 20)]);
+            // #endregion
+            $response = Http::timeout(10)->post($this->expoPushUrl, $message); // 10 second timeout
             $result = $response->json();
+            // #region agent log
+            Log::debug('ExpoPush: response received', ['user_id' => $userId, 'status' => $response->status()]);
+            // #endregion
 
             if ($response->successful()) {
                 // Check for ticket errors (Expo returns 200 but with error in ticket)
