@@ -4,6 +4,7 @@ namespace App\Notifications;
 
 use App\Channels\ExpoPushChannel;
 use App\Models\Week;
+use App\Notifications\Traits\ChannelFilterable;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Notifications\Messages\MailMessage;
@@ -11,7 +12,7 @@ use Illuminate\Notifications\Notification;
 
 class StockAvailableNotification extends Notification implements ShouldQueue
 {
-    use Queueable;
+    use Queueable, ChannelFilterable;
 
     public function __construct(
         public Week $week
@@ -19,13 +20,16 @@ class StockAvailableNotification extends Notification implements ShouldQueue
 
     /**
      * Get the notification's delivery channels.
-     * Push notifications are sent first to ensure delivery even if mail fails.
      */
     public function via(object $notifiable): array
     {
+        // If restricted to a specific channel, only use that
+        if ($this->getOnlyChannel()) {
+            return [$this->getOnlyChannel()];
+        }
+
         $channels = [];
 
-        // Push first - so it succeeds even if mail fails later
         if ($notifiable->push_notifications_enabled && $notifiable->pushToken) {
             $channels[] = ExpoPushChannel::class;
         }

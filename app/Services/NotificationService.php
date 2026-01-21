@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Channels\ExpoPushChannel;
 use App\Models\Order;
 use App\Models\User;
 use App\Models\Week;
@@ -16,9 +17,16 @@ use Illuminate\Support\Facades\Notification;
 
 /**
  * Service class for managing notifications (push + email)
+ * 
+ * IMPORTANT: Push notifications are sent FIRST, then emails.
+ * This ensures push notifications are delivered quickly even if email is slow/failing.
  */
 class NotificationService
 {
+    public function __construct(
+        private ExpoPushChannel $pushChannel
+    ) {}
+
     /**
      * Notify all users that stock is available
      */
@@ -30,8 +38,8 @@ class NotificationService
 
         Log::info('Sending stock available notification', ['week_id' => $week->id]);
 
-        // Get all non-admin users
-        $users = User::where('role', '!=', 'admin')->get();
+        // Get all non-admin users with their push tokens
+        $users = User::where('role', '!=', 'admin')->with('pushToken')->get();
 
         // #region agent log
         Log::debug('DEBUG: found users', ['count' => $users->count()]);
@@ -42,38 +50,57 @@ class NotificationService
             return;
         }
 
-        $successCount = 0;
-        $failCount = 0;
-
+        // PHASE 1: Send ALL push notifications first (fast)
+        // #region agent log
+        Log::debug('DEBUG: PHASE 1 - Push notifications START');
+        // #endregion
+        $pushSuccess = 0;
+        $pushFail = 0;
         foreach ($users as $user) {
-            // #region agent log
-            Log::debug('DEBUG: notifying user', ['user_id' => $user->id, 'email' => $user->email, 'push_enabled' => $user->push_notifications_enabled, 'email_enabled' => $user->email_notifications_enabled]);
-            // #endregion
-            try {
-                $user->notify(new StockAvailableNotification($week));
-                $successCount++;
-                // #region agent log
-                Log::debug('DEBUG: user notify OK', ['user_id' => $user->id]);
-                // #endregion
-            } catch (\Exception $e) {
-                $failCount++;
-                // #region agent log
-                Log::debug('DEBUG: user notify FAILED', ['user_id' => $user->id, 'error' => $e->getMessage()]);
-                // #endregion
-                Log::error('Failed to send stock notification to user', [
-                    'user_id' => $user->id,
-                    'error' => $e->getMessage(),
-                ]);
+            if ($user->push_notifications_enabled && $user->pushToken) {
+                try {
+                    $this->pushChannel->send($user, new StockAvailableNotification($week));
+                    $pushSuccess++;
+                } catch (\Exception $e) {
+                    $pushFail++;
+                    Log::error('Push notification failed', ['user_id' => $user->id, 'error' => $e->getMessage()]);
+                }
             }
         }
+        // #region agent log
+        Log::debug('DEBUG: PHASE 1 - Push notifications END', ['success' => $pushSuccess, 'failed' => $pushFail]);
+        // #endregion
+
+        // PHASE 2: Send ALL emails (slow, might timeout - but push is already done!)
+        // #region agent log
+        Log::debug('DEBUG: PHASE 2 - Emails START');
+        // #endregion
+        $emailSuccess = 0;
+        $emailFail = 0;
+        foreach ($users as $user) {
+            if ($user->email_notifications_enabled && $user->email) {
+                try {
+                    $user->notify((new StockAvailableNotification($week))->onlyVia('mail'));
+                    $emailSuccess++;
+                } catch (\Exception $e) {
+                    $emailFail++;
+                    Log::error('Email notification failed', ['user_id' => $user->id, 'error' => $e->getMessage()]);
+                }
+            }
+        }
+        // #region agent log
+        Log::debug('DEBUG: PHASE 2 - Emails END', ['success' => $emailSuccess, 'failed' => $emailFail]);
+        // #endregion
 
         // #region agent log
-        Log::debug('DEBUG: notifyStockAvailable END', ['success' => $successCount, 'failed' => $failCount]);
+        Log::debug('DEBUG: notifyStockAvailable END');
         // #endregion
 
         Log::info('Stock available notifications completed', [
-            'success' => $successCount,
-            'failed' => $failCount,
+            'push_success' => $pushSuccess,
+            'push_failed' => $pushFail,
+            'email_success' => $emailSuccess,
+            'email_failed' => $emailFail,
         ]);
     }
 
@@ -84,37 +111,43 @@ class NotificationService
     {
         Log::info('Sending order delivered notifications', ['week_id' => $week->id]);
 
-        // Get all orders for this week with their users
         $orders = Order::where('week_id', $week->id)
-            ->with('user')
+            ->with(['user', 'user.pushToken'])
             ->get();
 
-        $successCount = 0;
-        $failCount = 0;
-
+        // PHASE 1: Push notifications first
+        $pushSuccess = 0;
+        $pushFail = 0;
         foreach ($orders as $order) {
-            if ($order->user && $order->user->role !== 'admin') {
+            if ($order->user && $order->user->role !== 'admin' && $order->user->push_notifications_enabled && $order->user->pushToken) {
                 try {
-                    $order->user->notify(new OrderDeliveredNotification(
-                        $week,
-                        $order->quantity,
-                        $order->total
-                    ));
-                    $successCount++;
+                    $this->pushChannel->send($order->user, new OrderDeliveredNotification($week, $order->quantity, $order->total));
+                    $pushSuccess++;
                 } catch (\Exception $e) {
-                    $failCount++;
-                    Log::error('Failed to send order delivered notification', [
-                        'user_id' => $order->user->id,
-                        'order_id' => $order->id,
-                        'error' => $e->getMessage(),
-                    ]);
+                    $pushFail++;
+                    Log::error('Push notification failed', ['user_id' => $order->user->id, 'error' => $e->getMessage()]);
+                }
+            }
+        }
+
+        // PHASE 2: Emails
+        $emailSuccess = 0;
+        $emailFail = 0;
+        foreach ($orders as $order) {
+            if ($order->user && $order->user->role !== 'admin' && $order->user->email_notifications_enabled) {
+                try {
+                    $order->user->notify((new OrderDeliveredNotification($week, $order->quantity, $order->total))->onlyVia('mail'));
+                    $emailSuccess++;
+                } catch (\Exception $e) {
+                    $emailFail++;
+                    Log::error('Email notification failed', ['user_id' => $order->user->id, 'error' => $e->getMessage()]);
                 }
             }
         }
 
         Log::info('Order delivered notifications completed', [
-            'success' => $successCount,
-            'failed' => $failCount,
+            'push_success' => $pushSuccess, 'push_failed' => $pushFail,
+            'email_success' => $emailSuccess, 'email_failed' => $emailFail,
         ]);
     }
 
@@ -125,10 +158,10 @@ class NotificationService
     {
         Log::info('Sending delivery scheduled notifications', ['week_id' => $week->id]);
 
-        // Get users who have orders this week
         $userIds = Order::where('week_id', $week->id)->pluck('user_id')->unique();
         $users = User::whereIn('id', $userIds)
             ->where('role', '!=', 'admin')
+            ->with('pushToken')
             ->get();
 
         if ($users->isEmpty()) {
@@ -136,25 +169,39 @@ class NotificationService
             return;
         }
 
-        $successCount = 0;
-        $failCount = 0;
-
+        // PHASE 1: Push notifications first
+        $pushSuccess = 0;
+        $pushFail = 0;
         foreach ($users as $user) {
-            try {
-                $user->notify(new DeliveryScheduledNotification($week));
-                $successCount++;
-            } catch (\Exception $e) {
-                $failCount++;
-                Log::error('Failed to send delivery scheduled notification', [
-                    'user_id' => $user->id,
-                    'error' => $e->getMessage(),
-                ]);
+            if ($user->push_notifications_enabled && $user->pushToken) {
+                try {
+                    $this->pushChannel->send($user, new DeliveryScheduledNotification($week));
+                    $pushSuccess++;
+                } catch (\Exception $e) {
+                    $pushFail++;
+                    Log::error('Push notification failed', ['user_id' => $user->id, 'error' => $e->getMessage()]);
+                }
+            }
+        }
+
+        // PHASE 2: Emails
+        $emailSuccess = 0;
+        $emailFail = 0;
+        foreach ($users as $user) {
+            if ($user->email_notifications_enabled) {
+                try {
+                    $user->notify((new DeliveryScheduledNotification($week))->onlyVia('mail'));
+                    $emailSuccess++;
+                } catch (\Exception $e) {
+                    $emailFail++;
+                    Log::error('Email notification failed', ['user_id' => $user->id, 'error' => $e->getMessage()]);
+                }
             }
         }
 
         Log::info('Delivery scheduled notifications completed', [
-            'success' => $successCount,
-            'failed' => $failCount,
+            'push_success' => $pushSuccess, 'push_failed' => $pushFail,
+            'email_success' => $emailSuccess, 'email_failed' => $emailFail,
         ]);
     }
 
@@ -165,13 +212,12 @@ class NotificationService
     {
         Log::info('Processing payment reminder notifications');
 
-        // Find unpaid delivered orders from weeks where delivery has happened
         $unpaidOrders = Order::whereHas('week', function ($query) {
                 $query->where('all_orders_delivered', true);
             })
             ->where('is_paid', false)
             ->where('status', 'delivered')
-            ->with(['user', 'week'])
+            ->with(['user', 'user.pushToken', 'week'])
             ->get();
 
         if ($unpaidOrders->isEmpty()) {
@@ -179,32 +225,39 @@ class NotificationService
             return;
         }
 
-        $successCount = 0;
-        $failCount = 0;
-
+        // PHASE 1: Push notifications first
+        $pushSuccess = 0;
+        $pushFail = 0;
         foreach ($unpaidOrders as $order) {
-            if ($order->user && $order->user->role !== 'admin') {
+            if ($order->user && $order->user->role !== 'admin' && $order->user->push_notifications_enabled && $order->user->pushToken) {
                 try {
-                    $order->user->notify(new PaymentReminderNotification(
-                        $order->quantity,
-                        $order->total,
-                        $order->week->week_start
-                    ));
-                    $successCount++;
+                    $this->pushChannel->send($order->user, new PaymentReminderNotification($order->quantity, $order->total, $order->week->week_start));
+                    $pushSuccess++;
                 } catch (\Exception $e) {
-                    $failCount++;
-                    Log::error('Failed to send payment reminder notification', [
-                        'user_id' => $order->user->id,
-                        'order_id' => $order->id,
-                        'error' => $e->getMessage(),
-                    ]);
+                    $pushFail++;
+                    Log::error('Push notification failed', ['user_id' => $order->user->id, 'error' => $e->getMessage()]);
+                }
+            }
+        }
+
+        // PHASE 2: Emails
+        $emailSuccess = 0;
+        $emailFail = 0;
+        foreach ($unpaidOrders as $order) {
+            if ($order->user && $order->user->role !== 'admin' && $order->user->email_notifications_enabled) {
+                try {
+                    $order->user->notify((new PaymentReminderNotification($order->quantity, $order->total, $order->week->week_start))->onlyVia('mail'));
+                    $emailSuccess++;
+                } catch (\Exception $e) {
+                    $emailFail++;
+                    Log::error('Email notification failed', ['user_id' => $order->user->id, 'error' => $e->getMessage()]);
                 }
             }
         }
 
         Log::info('Payment reminder notifications completed', [
-            'success' => $successCount,
-            'failed' => $failCount,
+            'push_success' => $pushSuccess, 'push_failed' => $pushFail,
+            'email_success' => $emailSuccess, 'email_failed' => $emailFail,
         ]);
     }
 
@@ -219,21 +272,31 @@ class NotificationService
             'new' => $newQuantity,
         ]);
 
-        $user = User::find($userId);
+        $user = User::with('pushToken')->find($userId);
 
         if (!$user) {
             Log::warning('User not found for subscription trimmed notification', ['user_id' => $userId]);
             return;
         }
 
-        try {
-            $user->notify(new SubscriptionTrimmedNotification($originalQuantity, $newQuantity));
-            Log::info('Subscription trimmed notification sent', ['user_id' => $userId]);
-        } catch (\Exception $e) {
-            Log::error('Failed to send subscription trimmed notification', [
-                'user_id' => $userId,
-                'error' => $e->getMessage(),
-            ]);
+        // PHASE 1: Push first
+        if ($user->push_notifications_enabled && $user->pushToken) {
+            try {
+                $this->pushChannel->send($user, new SubscriptionTrimmedNotification($originalQuantity, $newQuantity));
+                Log::info('Subscription trimmed push sent', ['user_id' => $userId]);
+            } catch (\Exception $e) {
+                Log::error('Subscription trimmed push failed', ['user_id' => $userId, 'error' => $e->getMessage()]);
+            }
+        }
+
+        // PHASE 2: Email
+        if ($user->email_notifications_enabled) {
+            try {
+                $user->notify((new SubscriptionTrimmedNotification($originalQuantity, $newQuantity))->onlyVia('mail'));
+                Log::info('Subscription trimmed email sent', ['user_id' => $userId]);
+            } catch (\Exception $e) {
+                Log::error('Subscription trimmed email failed', ['user_id' => $userId, 'error' => $e->getMessage()]);
+            }
         }
     }
 
@@ -244,7 +307,6 @@ class NotificationService
     {
         Log::info('Processing pickup reminder notifications');
 
-        // Find delivered orders that haven't been picked up from previous weeks
         $currentWeek = Week::getCurrentWeek();
         
         $unpickedOrders = Order::whereHas('week', function ($query) use ($currentWeek) {
@@ -255,7 +317,7 @@ class NotificationService
             })
             ->where('status', 'delivered')
             ->where('picked_up', false)
-            ->with(['user', 'week'])
+            ->with(['user', 'user.pushToken', 'week'])
             ->get();
 
         if ($unpickedOrders->isEmpty()) {
@@ -263,31 +325,39 @@ class NotificationService
             return;
         }
 
-        $successCount = 0;
-        $failCount = 0;
-
+        // PHASE 1: Push notifications first
+        $pushSuccess = 0;
+        $pushFail = 0;
         foreach ($unpickedOrders as $order) {
-            if ($order->user && $order->user->role !== 'admin') {
+            if ($order->user && $order->user->role !== 'admin' && $order->user->push_notifications_enabled && $order->user->pushToken) {
                 try {
-                    $order->user->notify(new PickupReminderNotification(
-                        $order->quantity,
-                        $order->week->week_start
-                    ));
-                    $successCount++;
+                    $this->pushChannel->send($order->user, new PickupReminderNotification($order->quantity, $order->week->week_start));
+                    $pushSuccess++;
                 } catch (\Exception $e) {
-                    $failCount++;
-                    Log::error('Failed to send pickup reminder notification', [
-                        'user_id' => $order->user->id,
-                        'order_id' => $order->id,
-                        'error' => $e->getMessage(),
-                    ]);
+                    $pushFail++;
+                    Log::error('Push notification failed', ['user_id' => $order->user->id, 'error' => $e->getMessage()]);
+                }
+            }
+        }
+
+        // PHASE 2: Emails
+        $emailSuccess = 0;
+        $emailFail = 0;
+        foreach ($unpickedOrders as $order) {
+            if ($order->user && $order->user->role !== 'admin' && $order->user->email_notifications_enabled) {
+                try {
+                    $order->user->notify((new PickupReminderNotification($order->quantity, $order->week->week_start))->onlyVia('mail'));
+                    $emailSuccess++;
+                } catch (\Exception $e) {
+                    $emailFail++;
+                    Log::error('Email notification failed', ['user_id' => $order->user->id, 'error' => $e->getMessage()]);
                 }
             }
         }
 
         Log::info('Pickup reminder notifications completed', [
-            'success' => $successCount,
-            'failed' => $failCount,
+            'push_success' => $pushSuccess, 'push_failed' => $pushFail,
+            'email_success' => $emailSuccess, 'email_failed' => $emailFail,
         ]);
     }
 }

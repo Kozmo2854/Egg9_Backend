@@ -2,6 +2,8 @@
 
 namespace App\Notifications;
 
+use App\Channels\ExpoPushChannel;
+use App\Notifications\Traits\ChannelFilterable;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Notifications\Messages\MailMessage;
@@ -10,7 +12,7 @@ use Carbon\Carbon;
 
 class PickupReminderNotification extends Notification implements ShouldQueue
 {
-    use Queueable;
+    use Queueable, ChannelFilterable;
 
     public int $quantity;
     public Carbon $weekStart;
@@ -26,17 +28,17 @@ class PickupReminderNotification extends Notification implements ShouldQueue
 
     /**
      * Get the notification's delivery channels.
-     * Push notifications are sent first to ensure delivery even if mail fails.
-     *
-     * @return array<int, string>
      */
     public function via(object $notifiable): array
     {
+        if ($this->getOnlyChannel()) {
+            return [$this->getOnlyChannel()];
+        }
+
         $channels = [];
 
-        // Push first - so it succeeds even if mail fails later
         if ($notifiable->push_notifications_enabled && $notifiable->pushToken) {
-            $channels[] = \App\Channels\ExpoPushChannel::class;
+            $channels[] = ExpoPushChannel::class;
         }
 
         if ($notifiable->email_notifications_enabled) {
