@@ -260,8 +260,15 @@ class AdminController extends Controller
 
             DB::commit();
 
-            // Notify users that their orders have been delivered
-            $this->notificationService->notifyOrderDelivered($week);
+            // Notify users that their orders have been delivered (don't break request if notification fails)
+            try {
+                $this->notificationService->notifyOrderDelivered($week);
+            } catch (\Exception $e) {
+                Log::error('Failed to send order delivered notification', [
+                    'error' => $e->getMessage(),
+                    'trace' => $e->getTraceAsString(),
+                ]);
+            }
 
             return response()->json([
                 'message' => "Successfully marked {$updatedCount} orders as delivered",

@@ -34,9 +34,26 @@ class NotificationService
             return;
         }
 
-        Notification::send($users, new StockAvailableNotification($week));
+        $successCount = 0;
+        $failCount = 0;
 
-        Log::info('Stock available notification sent', ['user_count' => $users->count()]);
+        foreach ($users as $user) {
+            try {
+                $user->notify(new StockAvailableNotification($week));
+                $successCount++;
+            } catch (\Exception $e) {
+                $failCount++;
+                Log::error('Failed to send stock notification to user', [
+                    'user_id' => $user->id,
+                    'error' => $e->getMessage(),
+                ]);
+            }
+        }
+
+        Log::info('Stock available notifications completed', [
+            'success' => $successCount,
+            'failed' => $failCount,
+        ]);
     }
 
     /**
@@ -51,17 +68,33 @@ class NotificationService
             ->with('user')
             ->get();
 
+        $successCount = 0;
+        $failCount = 0;
+
         foreach ($orders as $order) {
             if ($order->user && $order->user->role !== 'admin') {
-                $order->user->notify(new OrderDeliveredNotification(
-                    $week,
-                    $order->quantity,
-                    $order->total
-                ));
+                try {
+                    $order->user->notify(new OrderDeliveredNotification(
+                        $week,
+                        $order->quantity,
+                        $order->total
+                    ));
+                    $successCount++;
+                } catch (\Exception $e) {
+                    $failCount++;
+                    Log::error('Failed to send order delivered notification', [
+                        'user_id' => $order->user->id,
+                        'order_id' => $order->id,
+                        'error' => $e->getMessage(),
+                    ]);
+                }
             }
         }
 
-        Log::info('Order delivered notifications sent', ['order_count' => $orders->count()]);
+        Log::info('Order delivered notifications completed', [
+            'success' => $successCount,
+            'failed' => $failCount,
+        ]);
     }
 
     /**
@@ -82,9 +115,26 @@ class NotificationService
             return;
         }
 
-        Notification::send($users, new DeliveryScheduledNotification($week));
+        $successCount = 0;
+        $failCount = 0;
 
-        Log::info('Delivery scheduled notifications sent', ['user_count' => $users->count()]);
+        foreach ($users as $user) {
+            try {
+                $user->notify(new DeliveryScheduledNotification($week));
+                $successCount++;
+            } catch (\Exception $e) {
+                $failCount++;
+                Log::error('Failed to send delivery scheduled notification', [
+                    'user_id' => $user->id,
+                    'error' => $e->getMessage(),
+                ]);
+            }
+        }
+
+        Log::info('Delivery scheduled notifications completed', [
+            'success' => $successCount,
+            'failed' => $failCount,
+        ]);
     }
 
     /**
@@ -108,17 +158,33 @@ class NotificationService
             return;
         }
 
+        $successCount = 0;
+        $failCount = 0;
+
         foreach ($unpaidOrders as $order) {
             if ($order->user && $order->user->role !== 'admin') {
-                $order->user->notify(new PaymentReminderNotification(
-                    $order->quantity,
-                    $order->total,
-                    $order->week->week_start
-                ));
+                try {
+                    $order->user->notify(new PaymentReminderNotification(
+                        $order->quantity,
+                        $order->total,
+                        $order->week->week_start
+                    ));
+                    $successCount++;
+                } catch (\Exception $e) {
+                    $failCount++;
+                    Log::error('Failed to send payment reminder notification', [
+                        'user_id' => $order->user->id,
+                        'order_id' => $order->id,
+                        'error' => $e->getMessage(),
+                    ]);
+                }
             }
         }
 
-        Log::info('Payment reminder notifications sent', ['order_count' => $unpaidOrders->count()]);
+        Log::info('Payment reminder notifications completed', [
+            'success' => $successCount,
+            'failed' => $failCount,
+        ]);
     }
 
     /**
@@ -139,7 +205,15 @@ class NotificationService
             return;
         }
 
-        $user->notify(new SubscriptionTrimmedNotification($originalQuantity, $newQuantity));
+        try {
+            $user->notify(new SubscriptionTrimmedNotification($originalQuantity, $newQuantity));
+            Log::info('Subscription trimmed notification sent', ['user_id' => $userId]);
+        } catch (\Exception $e) {
+            Log::error('Failed to send subscription trimmed notification', [
+                'user_id' => $userId,
+                'error' => $e->getMessage(),
+            ]);
+        }
     }
 
     /**
@@ -168,16 +242,32 @@ class NotificationService
             return;
         }
 
+        $successCount = 0;
+        $failCount = 0;
+
         foreach ($unpickedOrders as $order) {
             if ($order->user && $order->user->role !== 'admin') {
-                $order->user->notify(new PickupReminderNotification(
-                    $order->quantity,
-                    $order->week->week_start
-                ));
+                try {
+                    $order->user->notify(new PickupReminderNotification(
+                        $order->quantity,
+                        $order->week->week_start
+                    ));
+                    $successCount++;
+                } catch (\Exception $e) {
+                    $failCount++;
+                    Log::error('Failed to send pickup reminder notification', [
+                        'user_id' => $order->user->id,
+                        'order_id' => $order->id,
+                        'error' => $e->getMessage(),
+                    ]);
+                }
             }
         }
 
-        Log::info('Pickup reminder notifications sent', ['order_count' => $unpickedOrders->count()]);
+        Log::info('Pickup reminder notifications completed', [
+            'success' => $successCount,
+            'failed' => $failCount,
+        ]);
     }
 }
 

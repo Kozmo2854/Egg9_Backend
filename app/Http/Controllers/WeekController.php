@@ -112,15 +112,29 @@ class WeekController extends Controller
             $subscriptionResult = $this->subscriptionService->processSubscriptionsForWeek($week);
         }
 
-        // Send notifications for relevant changes
+        // Send notifications for relevant changes (don't break request if notification fails)
         // Stock available: only when setting stock for the first time (was 0, now > 0)
         if ($previousAvailableEggs == 0 && $week->available_eggs > 0) {
-            $this->notificationService->notifyStockAvailable($week);
+            try {
+                $this->notificationService->notifyStockAvailable($week);
+            } catch (\Exception $e) {
+                \Illuminate\Support\Facades\Log::error('Failed to send stock available notification', [
+                    'error' => $e->getMessage(),
+                    'trace' => $e->getTraceAsString(),
+                ]);
+            }
         }
 
         // Delivery scheduled: only when setting delivery date for the first time
         if (!$previousDeliveryDate && $week->delivery_date) {
-            $this->notificationService->notifyDeliveryScheduled($week);
+            try {
+                $this->notificationService->notifyDeliveryScheduled($week);
+            } catch (\Exception $e) {
+                \Illuminate\Support\Facades\Log::error('Failed to send delivery scheduled notification', [
+                    'error' => $e->getMessage(),
+                    'trace' => $e->getTraceAsString(),
+                ]);
+            }
         }
 
         $response = [
@@ -170,8 +184,15 @@ class WeekController extends Controller
         // Also update all orders for this week to 'completed' status
         $week->orders()->where('status', 'approved')->update(['status' => 'completed']);
 
-        // Notify users that their orders have been delivered
-        $this->notificationService->notifyOrderDelivered($week);
+        // Notify users that their orders have been delivered (don't break request if notification fails)
+        try {
+            $this->notificationService->notifyOrderDelivered($week);
+        } catch (\Exception $e) {
+            \Illuminate\Support\Facades\Log::error('Failed to send order delivered notification', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+        }
 
         return response()->json([
             'message' => 'All orders marked as delivered',
