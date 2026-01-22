@@ -59,10 +59,6 @@ class WeekController extends Controller
      */
     public function updateCurrentWeek(Request $request): JsonResponse
     {
-        // #region agent log
-        \Illuminate\Support\Facades\Log::debug('DEBUG: updateCurrentWeek START');
-        // #endregion
-
         $request->validate([
             'available_eggs' => 'sometimes|integer|min:0',
             'price_per_dozen' => 'sometimes|numeric|min:0|max:999999.99',
@@ -109,29 +105,16 @@ class WeekController extends Controller
 
         $week->save();
 
-        // #region agent log
-        \Illuminate\Support\Facades\Log::debug('DEBUG: week saved', ['prev' => $previousAvailableEggs, 'new' => $week->available_eggs]);
-        // #endregion
-
         // Process subscriptions when stock is first set (regardless of season)
         // Subscriptions are always honored, just can't create NEW ones in low season
         $subscriptionResult = null;
         if (!$subscriptionsProcessed && $week->available_eggs > 0) {
-            // #region agent log
-            \Illuminate\Support\Facades\Log::debug('DEBUG: processing subscriptions START');
-            // #endregion
             $subscriptionResult = $this->subscriptionService->processSubscriptionsForWeek($week);
-            // #region agent log
-            \Illuminate\Support\Facades\Log::debug('DEBUG: processing subscriptions END');
-            // #endregion
         }
 
         // Send notifications for relevant changes (don't break request if notification fails)
         // Stock available: only when setting stock for the first time (was 0, now > 0)
         if ($previousAvailableEggs == 0 && $week->available_eggs > 0) {
-            // #region agent log
-            \Illuminate\Support\Facades\Log::debug('DEBUG: notifyStockAvailable calling');
-            // #endregion
             try {
                 $this->notificationService->notifyStockAvailable($week);
             } catch (\Exception $e) {
@@ -139,13 +122,7 @@ class WeekController extends Controller
                     'error' => $e->getMessage(),
                     'trace' => $e->getTraceAsString(),
                 ]);
-                // #region agent log
-                \Illuminate\Support\Facades\Log::debug('DEBUG: notifyStockAvailable EXCEPTION', ['error' => $e->getMessage()]);
-                // #endregion
             }
-            // #region agent log
-            \Illuminate\Support\Facades\Log::debug('DEBUG: notifyStockAvailable done');
-            // #endregion
         }
 
         // Delivery scheduled: only when setting delivery date for the first time
@@ -160,10 +137,6 @@ class WeekController extends Controller
             }
         }
 
-        // #region agent log
-        \Illuminate\Support\Facades\Log::debug('DEBUG: building response');
-        // #endregion
-
         $response = [
             'message' => 'Week updated successfully',
             'week' => $this->formatWeek($week),
@@ -172,10 +145,6 @@ class WeekController extends Controller
         if ($subscriptionResult) {
             $response['subscriptions'] = $subscriptionResult;
         }
-
-        // #region agent log
-        \Illuminate\Support\Facades\Log::debug('DEBUG: returning response');
-        // #endregion
 
         return response()->json($response);
     }

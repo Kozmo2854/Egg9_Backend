@@ -32,18 +32,10 @@ class NotificationService
      */
     public function notifyStockAvailable(Week $week): void
     {
-        // #region agent log
-        Log::debug('DEBUG: notifyStockAvailable START', ['week_id' => $week->id]);
-        // #endregion
-
         Log::info('Sending stock available notification', ['week_id' => $week->id]);
 
         // Get all non-admin users with their push tokens
         $users = User::where('role', '!=', 'admin')->with('pushToken')->get();
-
-        // #region agent log
-        Log::debug('DEBUG: found users', ['count' => $users->count()]);
-        // #endregion
 
         if ($users->isEmpty()) {
             Log::info('No users to notify about stock availability');
@@ -51,9 +43,6 @@ class NotificationService
         }
 
         // PHASE 1: Send ALL push notifications first (fast)
-        // #region agent log
-        Log::debug('DEBUG: PHASE 1 - Push notifications START');
-        // #endregion
         $pushSuccess = 0;
         $pushFail = 0;
         foreach ($users as $user) {
@@ -67,14 +56,8 @@ class NotificationService
                 }
             }
         }
-        // #region agent log
-        Log::debug('DEBUG: PHASE 1 - Push notifications END', ['success' => $pushSuccess, 'failed' => $pushFail]);
-        // #endregion
 
         // PHASE 2: Send ALL emails (slow, might timeout - but push is already done!)
-        // #region agent log
-        Log::debug('DEBUG: PHASE 2 - Emails START');
-        // #endregion
         $emailSuccess = 0;
         $emailFail = 0;
         foreach ($users as $user) {
@@ -88,13 +71,6 @@ class NotificationService
                 }
             }
         }
-        // #region agent log
-        Log::debug('DEBUG: PHASE 2 - Emails END', ['success' => $emailSuccess, 'failed' => $emailFail]);
-        // #endregion
-
-        // #region agent log
-        Log::debug('DEBUG: notifyStockAvailable END');
-        // #endregion
 
         Log::info('Stock available notifications completed', [
             'push_success' => $pushSuccess,
