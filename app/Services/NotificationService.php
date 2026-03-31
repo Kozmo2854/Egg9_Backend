@@ -191,7 +191,7 @@ class NotificationService
         $unpaidOrders = Order::whereHas('week', function ($query) {
                 $query->where('all_orders_delivered', true);
             })
-            ->where('is_paid', false)
+            ->where('payment_submitted', false)
             ->where('status', 'delivered')
             ->with(['user', 'user.pushToken', 'week'])
             ->get();
