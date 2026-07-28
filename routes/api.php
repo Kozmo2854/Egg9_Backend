@@ -77,6 +77,8 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/orders/mark-delivered', [AdminController::class, 'markAllOrdersDelivered']);
         Route::put('/week/current', [WeekController::class, 'updateCurrentWeek']);
         Route::post('/week/subscription-preview', [WeekController::class, 'getSubscriptionPreview']);
+        Route::post('/week/skip', [WeekController::class, 'skipCurrentWeek']);
+        Route::post('/week/unskip', [WeekController::class, 'unskipCurrentWeek']);
         Route::put('/settings/price', [SettingsController::class, 'updatePrice']);
         Route::get('/settings/payment', [AdminController::class, 'getPaymentSettings']);
         Route::put('/settings/payment', [AdminController::class, 'updatePaymentSettings']);

@@ -23,6 +23,7 @@ class Week extends Model
         'all_orders_delivered',
         'is_low_season',
         'subscriptions_processed',
+        'is_skipped',
     ];
 
     protected $casts = [
@@ -34,6 +35,7 @@ class Week extends Model
         'all_orders_delivered' => 'boolean',
         'is_low_season' => 'boolean',
         'subscriptions_processed' => 'boolean',
+        'is_skipped' => 'boolean',
     ];
 
     /**
@@ -50,6 +52,7 @@ class Week extends Model
     public static function getCurrentWeek(): ?self
     {
         $today = now()->startOfDay();
+
         return self::where('week_start', '<=', $today)
             ->where('week_end', '>=', $today)
             ->first();
@@ -96,7 +99,7 @@ class Week extends Model
      */
     public function getLowSeasonOrderCap(): ?int
     {
-        if (!$this->is_low_season) {
+        if (! $this->is_low_season) {
             return null; // No cap in high season
         }
 
@@ -111,4 +114,3 @@ class Week extends Model
         return $this->is_low_season;
     }
 }
-

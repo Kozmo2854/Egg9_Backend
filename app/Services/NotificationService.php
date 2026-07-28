@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Channels\ExpoPushChannel;
 use App\Models\Order;
+use App\Models\Subscription;
 use App\Models\User;
 use App\Models\Week;
 use App\Notifications\DeliveryScheduledNotification;
@@ -12,12 +13,12 @@ use App\Notifications\PaymentReminderNotification;
 use App\Notifications\PickupReminderNotification;
 use App\Notifications\StockAvailableNotification;
 use App\Notifications\SubscriptionTrimmedNotification;
+use App\Notifications\WeekSkippedNotification;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Notification;
 
 /**
  * Service class for managing notifications (push + email)
- * 
+ *
  * IMPORTANT: Push notifications are sent FIRST, then emails.
  * This ensures push notifications are delivered quickly even if email is slow/failing.
  */
@@ -39,6 +40,7 @@ class NotificationService
 
         if ($users->isEmpty()) {
             Log::info('No users to notify about stock availability');
+
             return;
         }
 
@@ -142,6 +144,7 @@ class NotificationService
 
         if ($users->isEmpty()) {
             Log::info('No users to notify about delivery schedule');
+
             return;
         }
 
@@ -189,8 +192,8 @@ class NotificationService
         Log::info('Processing payment reminder notifications');
 
         $unpaidOrders = Order::whereHas('week', function ($query) {
-                $query->where('all_orders_delivered', true);
-            })
+            $query->where('all_orders_delivered', true);
+        })
             ->where('payment_submitted', false)
             ->where('status', 'delivered')
             ->with(['user', 'user.pushToken', 'week'])
@@ -198,6 +201,7 @@ class NotificationService
 
         if ($unpaidOrders->isEmpty()) {
             Log::info('No unpaid orders found for payment reminder');
+
             return;
         }
 
@@ -250,8 +254,9 @@ class NotificationService
 
         $user = User::with('pushToken')->find($userId);
 
-        if (!$user) {
+        if (! $user) {
             Log::warning('User not found for subscription trimmed notification', ['user_id' => $userId]);
+
             return;
         }
 
@@ -277,6 +282,81 @@ class NotificationService
     }
 
     /**
+     * Notify customers affected by a skipped week (subscription + one-time order owners).
+     *
+     * Only the given user IDs are notified (once each). Each subscriber's push copy
+     * includes the weeks left on their active subscription. Failure-tolerant per user.
+     *
+     * @param  array<int>  $userIds  Users affected by the skip (already restored/removed)
+     */
+    public function notifyWeekSkipped(Week $week, array $userIds): void
+    {
+        Log::info('Sending week skipped notifications', [
+            'week_id' => $week->id,
+            'user_count' => count($userIds),
+        ]);
+
+        $userIds = array_values(array_unique($userIds));
+
+        if (empty($userIds)) {
+            Log::info('No users to notify about skipped week');
+
+            return;
+        }
+
+        $users = User::whereIn('id', $userIds)
+            ->where('role', '!=', 'admin')
+            ->with('pushToken')
+            ->get();
+
+        if ($users->isEmpty()) {
+            return;
+        }
+
+        // Weeks remaining per user, from their active subscription (0 = one-time customer)
+        $weeksRemainingByUser = Subscription::whereIn('user_id', $users->pluck('id'))
+            ->where('status', 'active')
+            ->pluck('weeks_remaining', 'user_id');
+
+        // PHASE 1: Push notifications first
+        $pushSuccess = 0;
+        $pushFail = 0;
+        foreach ($users as $user) {
+            if ($user->push_notifications_enabled && $user->pushToken) {
+                try {
+                    $weeksRemaining = (int) ($weeksRemainingByUser[$user->id] ?? 0);
+                    $this->pushChannel->send($user, new WeekSkippedNotification($weeksRemaining));
+                    $pushSuccess++;
+                } catch (\Exception $e) {
+                    $pushFail++;
+                    Log::error('Push notification failed', ['user_id' => $user->id, 'error' => $e->getMessage()]);
+                }
+            }
+        }
+
+        // PHASE 2: Emails
+        $emailSuccess = 0;
+        $emailFail = 0;
+        foreach ($users as $user) {
+            if ($user->email_notifications_enabled) {
+                try {
+                    $weeksRemaining = (int) ($weeksRemainingByUser[$user->id] ?? 0);
+                    $user->notify((new WeekSkippedNotification($weeksRemaining))->onlyVia('mail'));
+                    $emailSuccess++;
+                } catch (\Exception $e) {
+                    $emailFail++;
+                    Log::error('Email notification failed', ['user_id' => $user->id, 'error' => $e->getMessage()]);
+                }
+            }
+        }
+
+        Log::info('Week skipped notifications completed', [
+            'push_success' => $pushSuccess, 'push_failed' => $pushFail,
+            'email_success' => $emailSuccess, 'email_failed' => $emailFail,
+        ]);
+    }
+
+    /**
      * Send pickup reminders to users with delivered but not picked up orders from previous weeks
      */
     public function notifyPickupReminder(): void
@@ -284,13 +364,13 @@ class NotificationService
         Log::info('Processing pickup reminder notifications');
 
         $currentWeek = Week::getCurrentWeek();
-        
+
         $unpickedOrders = Order::whereHas('week', function ($query) use ($currentWeek) {
-                $query->where('all_orders_delivered', true);
-                if ($currentWeek) {
-                    $query->where('id', '!=', $currentWeek->id);
-                }
-            })
+            $query->where('all_orders_delivered', true);
+            if ($currentWeek) {
+                $query->where('id', '!=', $currentWeek->id);
+            }
+        })
             ->where('status', 'delivered')
             ->where('picked_up', false)
             ->with(['user', 'user.pushToken', 'week'])
@@ -298,6 +378,7 @@ class NotificationService
 
         if ($unpickedOrders->isEmpty()) {
             Log::info('No unpicked orders found for pickup reminder');
+
             return;
         }
 
@@ -337,4 +418,3 @@ class NotificationService
         ]);
     }
 }
-

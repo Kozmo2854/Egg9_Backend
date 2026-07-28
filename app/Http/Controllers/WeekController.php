@@ -3,11 +3,10 @@
 namespace App\Http\Controllers;
 
 use App\Models\Week;
-use App\Models\AppSettings;
 use App\Services\NotificationService;
 use App\Services\SeasonSubscriptionService;
-use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 
 class WeekController extends Controller
 {
@@ -15,6 +14,7 @@ class WeekController extends Controller
         private NotificationService $notificationService,
         private SeasonSubscriptionService $subscriptionService
     ) {}
+
     /**
      * Get current week's information
      */
@@ -22,7 +22,7 @@ class WeekController extends Controller
     {
         $week = Week::getCurrentWeek();
 
-        if (!$week) {
+        if (! $week) {
             return response()->json([
                 'message' => 'No week available for ordering',
             ], 404);
@@ -40,7 +40,7 @@ class WeekController extends Controller
     {
         $week = Week::getCurrentWeek();
 
-        if (!$week) {
+        if (! $week) {
             return response()->json([
                 'message' => 'No week available for ordering',
             ], 404);
@@ -69,7 +69,7 @@ class WeekController extends Controller
 
         $week = Week::getCurrentWeek();
 
-        if (!$week) {
+        if (! $week) {
             return response()->json([
                 'message' => 'No current week found',
             ], 404);
@@ -108,7 +108,7 @@ class WeekController extends Controller
         // Process subscriptions when stock is first set (regardless of season)
         // Subscriptions are always honored, just can't create NEW ones in low season
         $subscriptionResult = null;
-        if (!$subscriptionsProcessed && $week->available_eggs > 0) {
+        if (! $subscriptionsProcessed && $week->available_eggs > 0 && ! $week->is_skipped) {
             $subscriptionResult = $this->subscriptionService->processSubscriptionsForWeek($week);
         }
 
@@ -126,7 +126,7 @@ class WeekController extends Controller
         }
 
         // Delivery scheduled: only when setting delivery date for the first time
-        if (!$previousDeliveryDate && $week->delivery_date) {
+        if (! $previousDeliveryDate && $week->delivery_date) {
             try {
                 $this->notificationService->notifyDeliveryScheduled($week);
             } catch (\Exception $e) {
@@ -172,7 +172,7 @@ class WeekController extends Controller
     {
         $week = Week::getCurrentWeek();
 
-        if (!$week) {
+        if (! $week) {
             return response()->json([
                 'message' => 'No current week found',
             ], 404);
@@ -201,6 +201,77 @@ class WeekController extends Controller
     }
 
     /**
+     * Skip the current week's delivery (Admin only)
+     *
+     * Skipping does NOT consume subscription weeks: any subscription order already
+     * created for this week is removed and its weeks_remaining is restored, so the
+     * subscription resumes on the next cycle. One-time orders for the week are removed.
+     * Refuses (409) if any order for the week is already paid.
+     */
+    public function skipCurrentWeek(Request $request): JsonResponse
+    {
+        $week = Week::getCurrentWeek();
+
+        if (! $week) {
+            return response()->json([
+                'message' => 'No current week found',
+            ], 404);
+        }
+
+        $result = $this->subscriptionService->skipWeek($week);
+
+        // Blocked because one or more orders for the week are already paid
+        if (! empty($result['blocked'])) {
+            return response()->json([
+                'message' => "Cannot skip: {$result['paid_count']} order(s) already paid — handle those first",
+            ], 409);
+        }
+
+        // Send notifications AFTER the transaction has committed (failure-tolerant)
+        if (! empty($result['affected_user_ids'])) {
+            try {
+                $this->notificationService->notifyWeekSkipped($week->fresh(), $result['affected_user_ids']);
+            } catch (\Exception $e) {
+                \Illuminate\Support\Facades\Log::error('Failed to send week skipped notification', [
+                    'error' => $e->getMessage(),
+                    'trace' => $e->getTraceAsString(),
+                ]);
+            }
+        }
+
+        return response()->json([
+            'message' => 'Week skipped successfully',
+            'week' => $this->formatWeek($week->fresh()),
+            'restoredSubscriptions' => $result['restored'] ?? 0,
+            'deletedOneTimeOrders' => $result['deleted_one_time'] ?? 0,
+        ]);
+    }
+
+    /**
+     * Un-skip the current week (Admin only)
+     *
+     * Clears is_skipped and resets subscriptions_processed so the normal stock-set
+     * flow re-processes subscriptions cleanly. Idempotent.
+     */
+    public function unskipCurrentWeek(Request $request): JsonResponse
+    {
+        $week = Week::getCurrentWeek();
+
+        if (! $week) {
+            return response()->json([
+                'message' => 'No current week found',
+            ], 404);
+        }
+
+        $this->subscriptionService->unskipWeek($week);
+
+        return response()->json([
+            'message' => 'Week un-skipped successfully',
+            'week' => $this->formatWeek($week->fresh()),
+        ]);
+    }
+
+    /**
      * Format week data for API response
      */
     private function formatWeek(Week $week): array
@@ -217,8 +288,8 @@ class WeekController extends Controller
             'allOrdersDelivered' => $week->all_orders_delivered,
             'isLowSeason' => $week->is_low_season,
             'subscriptionsProcessed' => $week->subscriptions_processed,
+            'isSkipped' => $week->is_skipped,
             'lowSeasonOrderCap' => $week->getLowSeasonOrderCap(),
         ];
     }
 }
-
