@@ -227,10 +227,11 @@ class WeekController extends Controller
             ], 409);
         }
 
-        // Send notifications AFTER the transaction has committed (failure-tolerant)
-        if (! empty($result['affected_user_ids'])) {
+        // Notify ALL customers AFTER the transaction has committed (failure-tolerant).
+        // Skip re-notifying when the week was already skipped (idempotent no-op).
+        if (empty($result['already'])) {
             try {
-                $this->notificationService->notifyWeekSkipped($week->fresh(), $result['affected_user_ids']);
+                $this->notificationService->notifyWeekSkipped($week->fresh(), $result['one_time_user_ids'] ?? []);
             } catch (\Exception $e) {
                 \Illuminate\Support\Facades\Log::error('Failed to send week skipped notification', [
                     'error' => $e->getMessage(),

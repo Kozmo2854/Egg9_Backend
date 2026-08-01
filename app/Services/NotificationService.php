@@ -282,41 +282,55 @@ class NotificationService
     }
 
     /**
-     * Notify customers affected by a skipped week (subscription + one-time order owners).
+     * Notify EVERY customer that the current week has been skipped, with copy tailored
+     * to each customer's status for the skipped week:
+     *   - active subscription      -> paused-this-week copy (incl. weeks remaining)
+     *   - had a one-time order      -> order-cancelled copy
+     *   - neither                   -> generic "we'll be back next week" copy
      *
-     * Only the given user IDs are notified (once each). Each subscriber's push copy
-     * includes the weeks left on their active subscription. Failure-tolerant per user.
+     * Subscription takes precedence over a one-time order if a customer had both.
+     * Two-phase (push first, email later), gated on user prefs, failure-tolerant per user.
      *
-     * @param  array<int>  $userIds  Users affected by the skip (already restored/removed)
+     * @param  array<int>  $oneTimeUserIds  IDs of customers whose one-time order the skip cancelled
+     *                                      (captured before deletion — their orders no longer exist)
      */
-    public function notifyWeekSkipped(Week $week, array $userIds): void
+    public function notifyWeekSkipped(Week $week, array $oneTimeUserIds = []): void
     {
-        Log::info('Sending week skipped notifications', [
-            'week_id' => $week->id,
-            'user_count' => count($userIds),
-        ]);
+        Log::info('Sending week skipped notifications', ['week_id' => $week->id]);
 
-        $userIds = array_values(array_unique($userIds));
-
-        if (empty($userIds)) {
-            Log::info('No users to notify about skipped week');
-
-            return;
-        }
-
-        $users = User::whereIn('id', $userIds)
-            ->where('role', '!=', 'admin')
+        // ALL non-admin customers are notified, regardless of whether they ordered.
+        $users = User::where('role', '!=', 'admin')
             ->with('pushToken')
             ->get();
 
         if ($users->isEmpty()) {
+            Log::info('No customers to notify about skipped week');
+
             return;
         }
 
-        // Weeks remaining per user, from their active subscription (0 = one-time customer)
+        $oneTimeUserIds = array_flip(array_values(array_unique($oneTimeUserIds)));
+
+        // Weeks remaining per user, from their active subscription (absent = no subscription)
         $weeksRemainingByUser = Subscription::whereIn('user_id', $users->pluck('id'))
             ->where('status', 'active')
             ->pluck('weeks_remaining', 'user_id');
+
+        // Resolve the notification (variant + copy) for a given user.
+        $notificationFor = function (User $user) use ($weeksRemainingByUser, $oneTimeUserIds): WeekSkippedNotification {
+            if (isset($weeksRemainingByUser[$user->id])) {
+                return new WeekSkippedNotification(
+                    WeekSkippedNotification::VARIANT_SUBSCRIPTION,
+                    (int) $weeksRemainingByUser[$user->id]
+                );
+            }
+
+            if (isset($oneTimeUserIds[$user->id])) {
+                return new WeekSkippedNotification(WeekSkippedNotification::VARIANT_ORDER_CANCELLED);
+            }
+
+            return new WeekSkippedNotification(WeekSkippedNotification::VARIANT_NONE);
+        };
 
         // PHASE 1: Push notifications first
         $pushSuccess = 0;
@@ -324,8 +338,7 @@ class NotificationService
         foreach ($users as $user) {
             if ($user->push_notifications_enabled && $user->pushToken) {
                 try {
-                    $weeksRemaining = (int) ($weeksRemainingByUser[$user->id] ?? 0);
-                    $this->pushChannel->send($user, new WeekSkippedNotification($weeksRemaining));
+                    $this->pushChannel->send($user, $notificationFor($user));
                     $pushSuccess++;
                 } catch (\Exception $e) {
                     $pushFail++;
@@ -340,8 +353,7 @@ class NotificationService
         foreach ($users as $user) {
             if ($user->email_notifications_enabled) {
                 try {
-                    $weeksRemaining = (int) ($weeksRemainingByUser[$user->id] ?? 0);
-                    $user->notify((new WeekSkippedNotification($weeksRemaining))->onlyVia('mail'));
+                    $user->notify($notificationFor($user)->onlyVia('mail'));
                     $emailSuccess++;
                 } catch (\Exception $e) {
                     $emailFail++;

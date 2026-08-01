@@ -237,6 +237,34 @@ class WeekSkipTest extends TestCase
     }
 
     // ------------------------------------------------------------------
+    // Stock zeroing
+    // ------------------------------------------------------------------
+
+    public function test_skip_sets_available_eggs_to_zero(): void
+    {
+        $week = $this->createWeek(['available_eggs' => 200]);
+
+        $this->service()->skipWeek($week);
+
+        $this->assertEquals(0, $week->fresh()->available_eggs);
+        $this->assertTrue($week->fresh()->is_skipped);
+    }
+
+    public function test_unskip_leaves_stock_at_zero_for_admin_to_re_enter(): void
+    {
+        $week = $this->createWeek(['available_eggs' => 200]);
+
+        $this->service()->skipWeek($week);
+        $this->assertEquals(0, $week->fresh()->available_eggs);
+
+        $this->service()->unskipWeek($week->fresh());
+
+        // Un-skip must NOT restore stock — admin re-enters it
+        $this->assertEquals(0, $week->fresh()->available_eggs);
+        $this->assertFalse($week->fresh()->is_skipped);
+    }
+
+    // ------------------------------------------------------------------
     // Un-skip
     // ------------------------------------------------------------------
 

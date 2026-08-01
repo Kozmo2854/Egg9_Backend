@@ -98,7 +98,10 @@ class SeasonSubscriptionService
      * (weeks_remaining += 1, completed -> active), delete the order, then flag skipped.
      * One-time orders for the week are always hard-deleted.
      *
-     * @return array{blocked?: bool, paid_count?: int, skipped?: bool, already?: bool, restored?: int, deleted_one_time?: int, affected_user_ids?: array<int>}
+     * Also zeroes available_eggs so one-time ordering is blocked while skipped. Un-skip
+     * does NOT restore stock (admin re-enters it).
+     *
+     * @return array{blocked?: bool, paid_count?: int, skipped?: bool, already?: bool, restored?: int, deleted_one_time?: int, affected_user_ids?: array<int>, one_time_user_ids?: array<int>}
      */
     public function skipWeek(Week $week): array
     {
@@ -114,6 +117,7 @@ class SeasonSubscriptionService
                     'restored' => 0,
                     'deleted_one_time' => 0,
                     'affected_user_ids' => [],
+                    'one_time_user_ids' => [],
                 ];
             }
 
@@ -142,14 +146,19 @@ class SeasonSubscriptionService
                 ->whereNull('subscription_id')
                 ->get();
 
+            $oneTimeUserIds = [];
             $deletedOneTime = 0;
             foreach ($oneTimeOrders as $order) {
                 $affectedUserIds[] = $order->user_id;
+                $oneTimeUserIds[] = $order->user_id;
                 $order->delete();
                 $deletedOneTime++;
             }
 
             $week->is_skipped = true;
+            // Skipping zeroes the week's stock so one-time ordering is blocked while skipped.
+            // Un-skip intentionally does NOT restore this — the admin re-enters stock.
+            $week->available_eggs = 0;
             $week->save();
 
             Log::info('Week skipped', [
@@ -164,6 +173,7 @@ class SeasonSubscriptionService
                 'restored' => $restored,
                 'deleted_one_time' => $deletedOneTime,
                 'affected_user_ids' => array_values(array_unique($affectedUserIds)),
+                'one_time_user_ids' => array_values(array_unique($oneTimeUserIds)),
             ];
         });
     }
