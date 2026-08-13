@@ -2,8 +2,8 @@
 
 namespace App\Console\Commands;
 
-use App\Models\Week;
 use App\Models\AppSettings;
+use App\Models\Week;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -30,8 +30,9 @@ class ProcessWeeklyCycle extends Command
     public function handle()
     {
         // Check if it's Monday or force flag is set
-        if (!$this->option('force') && now()->dayOfWeek !== 1) {
+        if (! $this->option('force') && now()->dayOfWeek !== 1) {
             $this->info('This command should only run on Mondays. Use --force to override.');
+
             return 0;
         }
 
@@ -64,8 +65,8 @@ class ProcessWeeklyCycle extends Command
         } catch (\Exception $e) {
             DB::rollBack();
 
-            $this->error('✗ Error processing weekly cycle: ' . $e->getMessage());
-            Log::error('Weekly cycle processing failed: ' . $e->getMessage(), [
+            $this->error('✗ Error processing weekly cycle: '.$e->getMessage());
+            Log::error('Weekly cycle processing failed: '.$e->getMessage(), [
                 'exception' => $e,
             ]);
 
@@ -85,29 +86,35 @@ class ProcessWeeklyCycle extends Command
 
         if ($allWeeks->isEmpty()) {
             $this->line('  No weeks to move');
+
             return;
         }
 
         // Move each week back by the number of weeks needed to clear the current week slot
         $currentWeekStart = now()->startOfWeek();
-        
+
         foreach ($allWeeks as $index => $week) {
+            // Skip already-past weeks so we don't re-date them onto an occupied week_start slot (unique-constraint collision, e.g. after a skipped week)
+            if ($week->week_end->isPast()) {
+                continue;
+            }
+
             // Calculate how many weeks to shift back (at least 1 week before current)
             $weeksToShift = $index + 1;
             $newWeekStart = $currentWeekStart->copy()->subWeeks($weeksToShift);
             $newWeekEnd = $newWeekStart->copy()->addDays(6);
-            
+
             $oldStart = $week->week_start->format('Y-m-d');
-            
+
             $week->update([
                 'week_start' => $newWeekStart,
                 'week_end' => $newWeekEnd,
                 'is_ordering_open' => false,
             ]);
-            
+
             $this->line("  - Moved week {$oldStart} → {$newWeekStart->format('Y-m-d')}");
         }
-        
+
         $this->info("  ✓ Moved {$allWeeks->count()} week(s) to the past");
     }
 
@@ -146,6 +153,7 @@ class ProcessWeeklyCycle extends Command
 
         if ($existingWeek) {
             $this->line("  Week starting {$weekStart->format('Y-m-d')} already exists");
+
             return $existingWeek;
         }
 
