@@ -1,14 +1,14 @@
 <?php
 
-use App\Http\Controllers\AuthController;
-use App\Http\Controllers\OrderController;
-use App\Http\Controllers\SubscriptionController;
-use App\Http\Controllers\WeekController;
-use App\Http\Controllers\SettingsController;
 use App\Http\Controllers\AdminController;
+use App\Http\Controllers\AuthController;
 use App\Http\Controllers\CronController;
+use App\Http\Controllers\OrderController;
 use App\Http\Controllers\PushTokenController;
-use Illuminate\Http\Request;
+use App\Http\Controllers\SettingsController;
+use App\Http\Controllers\SubscriptionController;
+use App\Http\Controllers\TestMailController;
+use App\Http\Controllers\WeekController;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -31,7 +31,7 @@ Route::middleware('auth:sanctum')->group(function () {
     // Auth
     Route::post('/logout', [AuthController::class, 'logout']);
     Route::get('/user', [AuthController::class, 'user']);
-    
+
     // User Profile Management
     Route::patch('/user/profile', [AuthController::class, 'updateProfile']);
     Route::patch('/user/email', [AuthController::class, 'updateEmail']);
@@ -42,7 +42,7 @@ Route::middleware('auth:sanctum')->group(function () {
     // Week Information
     Route::get('/week/current', [WeekController::class, 'getCurrentWeek']);
     Route::get('/available-eggs', [WeekController::class, 'getAvailableEggs']);
-    
+
     // App Settings
     Route::get('/settings', [SettingsController::class, 'index']);
 
@@ -82,6 +82,8 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::put('/settings/price', [SettingsController::class, 'updatePrice']);
         Route::get('/settings/payment', [AdminController::class, 'getPaymentSettings']);
         Route::put('/settings/payment', [AdminController::class, 'updatePaymentSettings']);
+
+        // TEMPORARY: staging-only mail test, remove after Resend verification
+        Route::post('/test-mail', [TestMailController::class, 'send']);
     });
 });
-
