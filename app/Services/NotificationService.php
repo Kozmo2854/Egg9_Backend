@@ -400,7 +400,7 @@ class NotificationService
         foreach ($unpickedOrders as $order) {
             if ($order->user && $order->user->role !== 'admin' && $order->user->push_notifications_enabled && $order->user->pushToken) {
                 try {
-                    $this->pushChannel->send($order->user, new PickupReminderNotification($order->quantity, $order->week->week_start));
+                    $this->pushChannel->send($order->user, new PickupReminderNotification($order->quantity, $order->week->week_start, $order->id));
                     $pushSuccess++;
                 } catch (\Exception $e) {
                     $pushFail++;
@@ -415,7 +415,7 @@ class NotificationService
         foreach ($unpickedOrders as $order) {
             if ($order->user && $order->user->role !== 'admin' && $order->user->email_notifications_enabled) {
                 try {
-                    $order->user->notify((new PickupReminderNotification($order->quantity, $order->week->week_start))->onlyVia('mail'));
+                    $order->user->notify((new PickupReminderNotification($order->quantity, $order->week->week_start, $order->id))->onlyVia('mail'));
                     $emailSuccess++;
                 } catch (\Exception $e) {
                     $emailFail++;

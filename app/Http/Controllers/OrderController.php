@@ -6,6 +6,7 @@ use App\Models\Order;
 use App\Models\Week;
 use App\Services\OrderService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
 class OrderController extends Controller
@@ -16,6 +17,7 @@ class OrderController extends Controller
     {
         $this->orderService = $orderService;
     }
+
     /**
      * Get all orders for the authenticated user
      */
@@ -27,7 +29,7 @@ class OrderController extends Controller
             ->get();
 
         return response()->json([
-            'orders' => $orders->map(fn($order) => $this->orderService->formatOrder($order)),
+            'orders' => $orders->map(fn ($order) => $this->orderService->formatOrder($order)),
         ]);
     }
 
@@ -38,7 +40,7 @@ class OrderController extends Controller
     {
         $week = Week::getCurrentWeek();
 
-        if (!$week) {
+        if (! $week) {
             return response()->json([
                 'order' => null,
             ]);
@@ -50,7 +52,7 @@ class OrderController extends Controller
             ->with('week')
             ->first();
 
-        if (!$order) {
+        if (! $order) {
             return response()->json([
                 'order' => null,
             ]);
@@ -68,7 +70,7 @@ class OrderController extends Controller
     {
         $week = Week::getCurrentWeek();
 
-        if (!$week) {
+        if (! $week) {
             return response()->json([
                 'order' => null,
             ]);
@@ -80,7 +82,7 @@ class OrderController extends Controller
             ->with('week')
             ->first();
 
-        if (!$order) {
+        if (! $order) {
             return response()->json([
                 'order' => null,
             ]);
@@ -107,7 +109,7 @@ class OrderController extends Controller
             ->get();
 
         return response()->json([
-            'orders' => $orders->map(fn($order) => $this->orderService->formatOrder($order)),
+            'orders' => $orders->map(fn ($order) => $this->orderService->formatOrder($order)),
         ]);
     }
 
@@ -129,14 +131,14 @@ class OrderController extends Controller
 
         $week = Week::getCurrentWeek();
 
-        if (!$week) {
+        if (! $week) {
             return response()->json([
                 'message' => 'No week available for ordering',
             ], 400);
         }
 
         // Check if ordering is open for this week
-        if (!$week->is_ordering_open) {
+        if (! $week->is_ordering_open) {
             return response()->json([
                 'message' => 'Ordering is closed for this week',
             ], 400);
@@ -220,7 +222,7 @@ class OrderController extends Controller
 
         $order = Order::with('week')->find($id);
 
-        if (!$order) {
+        if (! $order) {
             return response()->json([
                 'message' => 'Order not found',
             ], 404);
@@ -234,7 +236,7 @@ class OrderController extends Controller
         }
 
         // Check if order can be modified
-        if (!$order->canBeModified()) {
+        if (! $order->canBeModified()) {
             return response()->json([
                 'message' => 'Only pending orders can be updated',
             ], 400);
@@ -249,21 +251,21 @@ class OrderController extends Controller
 
         $week = Week::getCurrentWeek();
 
-        if (!$week || $order->week_id !== $week->id) {
+        if (! $week || $order->week_id !== $week->id) {
             return response()->json([
                 'message' => 'Cannot update order for past or closed weeks',
             ], 400);
         }
 
         // Check if ordering is open for this week
-        if (!$week->is_ordering_open) {
+        if (! $week->is_ordering_open) {
             return response()->json([
                 'message' => 'Ordering is closed for this week',
             ], 400);
         }
 
         // Check low season order cap (only for one-time orders, not subscription orders)
-        if (!$order->subscription_id) {
+        if (! $order->subscription_id) {
             $lowSeasonCap = $week->getLowSeasonOrderCap();
             if ($lowSeasonCap !== null && $request->quantity > $lowSeasonCap) {
                 return response()->json([
@@ -307,7 +309,7 @@ class OrderController extends Controller
     {
         $order = Order::find($id);
 
-        if (!$order) {
+        if (! $order) {
             return response()->json([
                 'message' => 'Order not found',
             ], 404);
@@ -321,7 +323,7 @@ class OrderController extends Controller
         }
 
         // Check if order can be modified
-        if (!$order->canBeModified()) {
+        if (! $order->canBeModified()) {
             return response()->json([
                 'message' => 'Only pending orders can be cancelled',
             ], 400);
@@ -348,7 +350,7 @@ class OrderController extends Controller
     {
         $order = Order::with('week')->find($id);
 
-        if (!$order) {
+        if (! $order) {
             return response()->json([
                 'message' => 'Order not found',
             ], 404);
@@ -387,7 +389,7 @@ class OrderController extends Controller
     {
         $order = Order::with('week')->find($id);
 
-        if (!$order) {
+        if (! $order) {
             return response()->json([
                 'message' => 'Order not found',
             ], 404);
@@ -401,14 +403,14 @@ class OrderController extends Controller
         }
 
         // Only allow confirming delivered orders
-        if (!in_array($order->status, ['delivered', 'completed'])) {
+        if (! in_array($order->status, ['delivered', 'completed'])) {
             return response()->json([
                 'message' => 'Only delivered orders can be confirmed as picked up',
             ], 400);
         }
 
         $order->update(['picked_up' => true]);
-        
+
         // Check if order is now complete (delivered + paid + picked up)
         $order->refresh();
         $order->checkAndUpdateCompletion();
@@ -417,5 +419,37 @@ class OrderController extends Controller
             'message' => 'Pickup confirmed successfully',
             'order' => $this->orderService->formatOrder($order),
         ]);
+    }
+
+    /**
+     * Confirm pickup from a signed one-click email link.
+     *
+     * Public endpoint: no auth — trust comes from the valid temporary signature
+     * (validated by the `signed` middleware). Opened in a browser from an email,
+     * so it renders a small branded HTML page rather than JSON. Idempotent.
+     *
+     * @param  int|string  $order  Order id (route param; not model-bound so we can
+     *                             render a friendly page instead of a 404 on miss).
+     */
+    public function confirmPickupFromEmail($order)
+    {
+        $model = Order::find($order);
+
+        if (! $model) {
+            return response()->view('emails.pickup-confirm', ['state' => 'not_found'], 404);
+        }
+
+        if (! in_array($model->status, ['delivered', 'completed'])) {
+            return response()->view('emails.pickup-confirm', ['state' => 'not_ready'], 422);
+        }
+
+        if ($model->picked_up) {
+            return response()->view('emails.pickup-confirm', ['state' => 'already']);
+        }
+
+        // Raw DB update: no model events / no notifications fired.
+        DB::table('orders')->where('id', $model->id)->update(['picked_up' => true]);
+
+        return response()->view('emails.pickup-confirm', ['state' => 'confirmed']);
     }
 }

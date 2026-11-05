@@ -4,6 +4,7 @@ namespace App\Notifications;
 
 use App\Channels\ExpoPushChannel;
 use App\Models\Week;
+use App\Notifications\Concerns\HasEmailFooter;
 use App\Notifications\Traits\ChannelFilterable;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -12,7 +13,7 @@ use Illuminate\Notifications\Notification;
 
 class StockAvailableNotification extends Notification implements ShouldQueue
 {
-    use Queueable, ChannelFilterable;
+    use ChannelFilterable, HasEmailFooter, Queueable;
 
     public function __construct(
         public Week $week
@@ -48,7 +49,7 @@ class StockAvailableNotification extends Notification implements ShouldQueue
     {
         $pricePerDozen = number_format($this->week->price_per_dozen, 0);
 
-        return (new MailMessage)
+        $mail = (new MailMessage)
             ->subject('🥚 Fresh Eggs Available This Week!')
             ->greeting("Hi {$notifiable->name}!")
             ->line("Our chickens have been busy this week and we've got fresh eggs waiting for you! 🥚")
@@ -56,6 +57,8 @@ class StockAvailableNotification extends Notification implements ShouldQueue
             ->line('Don\'t miss out - order while supplies last!')
             ->action('Order Now', url('/'))
             ->line('Thank you for supporting our little farm! 🐣');
+
+        return $this->withEmailFooter($mail);
     }
 
     /**
@@ -69,4 +72,3 @@ class StockAvailableNotification extends Notification implements ShouldQueue
         ];
     }
 }
-

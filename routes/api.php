@@ -21,6 +21,11 @@ use Illuminate\Support\Facades\Route;
 Route::post('/login', [AuthController::class, 'login']);
 Route::post('/register', [AuthController::class, 'register']);
 
+// One-click pickup confirmation from email (Public, secured by signed URL)
+Route::get('/orders/confirm-pickup/{order}', [OrderController::class, 'confirmPickupFromEmail'])
+    ->middleware('signed')
+    ->name('orders.confirm-pickup-email');
+
 // Cron Routes (Public but secured with CRON_SECRET)
 Route::post('/cron/process-weekly-cycle', [CronController::class, 'processWeeklyCycle']);
 Route::post('/cron/payment-reminder', [CronController::class, 'sendPaymentReminders']);

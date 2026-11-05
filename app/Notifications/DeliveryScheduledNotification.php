@@ -4,6 +4,7 @@ namespace App\Notifications;
 
 use App\Channels\ExpoPushChannel;
 use App\Models\Week;
+use App\Notifications\Concerns\HasEmailFooter;
 use App\Notifications\Traits\ChannelFilterable;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -12,7 +13,7 @@ use Illuminate\Notifications\Notification;
 
 class DeliveryScheduledNotification extends Notification implements ShouldQueue
 {
-    use Queueable, ChannelFilterable;
+    use ChannelFilterable, HasEmailFooter, Queueable;
 
     public function __construct(
         public Week $week
@@ -48,16 +49,18 @@ class DeliveryScheduledNotification extends Notification implements ShouldQueue
         $deliveryDate = $this->week->delivery_date?->format('l, F j, Y') ?? 'TBD';
         $deliveryTime = $this->week->delivery_time ?? 'TBD';
 
-        return (new MailMessage)
+        $mail = (new MailMessage)
             ->subject('🐔 Your Eggs Are On Their Way!')
             ->greeting("Hi {$notifiable->name}!")
             ->line("We're getting your eggs ready for delivery! 🥚")
-            ->line("**When to expect them:**")
+            ->line('**When to expect them:**')
             ->line("📅 **{$deliveryDate}**")
             ->line("🕐 **{$deliveryTime}**")
             ->line("Make sure someone's around to welcome them!")
             ->action('View Your Order', url('/'))
             ->line('See you soon! 🐣');
+
+        return $this->withEmailFooter($mail);
     }
 
     /**
@@ -70,8 +73,7 @@ class DeliveryScheduledNotification extends Notification implements ShouldQueue
 
         return [
             'title' => '🐔 Delivery Coming!',
-            'body' => "Your eggs are on their way! Arriving {$date}" . ($time ? " at {$time}" : '') . " 🥚",
+            'body' => "Your eggs are on their way! Arriving {$date}".($time ? " at {$time}" : '').' 🥚',
         ];
     }
 }
-

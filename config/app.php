@@ -56,6 +56,19 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Public Site URL
+    |--------------------------------------------------------------------------
+    |
+    | Public-facing marketing/site URL shown in the footer of notification
+    | emails. Kept separate from APP_URL (which may point at the API host)
+    | so it can be swapped via the SITE_URL env var without code changes.
+    |
+    */
+
+    'site_url' => env('SITE_URL', 'https://egg9.net'),
+
+    /*
+    |--------------------------------------------------------------------------
     | Application Timezone
     |--------------------------------------------------------------------------
     |

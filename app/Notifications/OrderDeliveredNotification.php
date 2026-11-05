@@ -4,6 +4,7 @@ namespace App\Notifications;
 
 use App\Channels\ExpoPushChannel;
 use App\Models\Week;
+use App\Notifications\Concerns\HasEmailFooter;
 use App\Notifications\Traits\ChannelFilterable;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -12,7 +13,7 @@ use Illuminate\Notifications\Notification;
 
 class OrderDeliveredNotification extends Notification implements ShouldQueue
 {
-    use Queueable, ChannelFilterable;
+    use ChannelFilterable, HasEmailFooter, Queueable;
 
     public function __construct(
         public Week $week,
@@ -49,16 +50,18 @@ class OrderDeliveredNotification extends Notification implements ShouldQueue
     {
         $totalFormatted = number_format($this->total, 0);
 
-        return (new MailMessage)
+        $mail = (new MailMessage)
             ->subject('🐔 Your Eggs Have Arrived!')
             ->greeting("Hi {$notifiable->name}!")
-            ->line("Great news – your eggs have made it safely to you! 🥚")
-            ->line("**Your order:**")
+            ->line('Great news – your eggs have made it safely to you! 🥚')
+            ->line('**Your order:**')
             ->line("• {$this->quantity} fresh eggs")
             ->line("• Total: {$totalFormatted} RSD")
             ->line("They're ready and waiting for you to pick them up!")
             ->action('View Your Order', url('/'))
             ->line('Thank you for being part of the Egg9 family! 🐣');
+
+        return $this->withEmailFooter($mail);
     }
 
     /**
@@ -72,4 +75,3 @@ class OrderDeliveredNotification extends Notification implements ShouldQueue
         ];
     }
 }
-

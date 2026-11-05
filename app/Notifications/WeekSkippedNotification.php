@@ -3,6 +3,7 @@
 namespace App\Notifications;
 
 use App\Channels\ExpoPushChannel;
+use App\Notifications\Concerns\HasEmailFooter;
 use App\Notifications\Traits\ChannelFilterable;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -11,7 +12,7 @@ use Illuminate\Notifications\Notification;
 
 class WeekSkippedNotification extends Notification implements ShouldQueue
 {
-    use ChannelFilterable, Queueable;
+    use ChannelFilterable, HasEmailFooter, Queueable;
 
     /** Customer has an active subscription that is paused for the skipped week. */
     public const VARIANT_SUBSCRIPTION = 'subscription';
@@ -83,11 +84,13 @@ class WeekSkippedNotification extends Notification implements ShouldQueue
      */
     public function toMail(object $notifiable): MailMessage
     {
-        return (new MailMessage)
+        $mail = (new MailMessage)
             ->subject('🐔 This Week\'s Delivery Is Skipped')
             ->greeting("Hi {$notifiable->name}!")
             ->line($this->body())
             ->line('Thank you for being part of the Egg9 family!');
+
+        return $this->withEmailFooter($mail);
     }
 
     /**

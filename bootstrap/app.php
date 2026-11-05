@@ -26,6 +26,15 @@ return Application::configure(basePath: dirname(__DIR__))
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
+        // A tampered/expired signed pickup-confirm link lands here (403 from the
+        // `signed` middleware). The link is opened in a browser from an email, so
+        // render a friendly branded HTML page instead of a JSON/plain 403.
+        $exceptions->render(function (\Illuminate\Routing\Exceptions\InvalidSignatureException $e, $request) {
+            if ($request->is('api/orders/confirm-pickup/*')) {
+                return response()->view('emails.pickup-confirm', ['state' => 'expired'], 403);
+            }
+        });
+
         // Log all exceptions with full context
         $exceptions->report(function (\Throwable $e) {
             \Illuminate\Support\Facades\Log::error('Exception caught', [
