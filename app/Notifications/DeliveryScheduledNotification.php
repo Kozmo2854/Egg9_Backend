@@ -57,7 +57,7 @@ class DeliveryScheduledNotification extends Notification implements ShouldQueue
             ->line("📅 **{$deliveryDate}**")
             ->line("🕐 **{$deliveryTime}**")
             ->line("Make sure someone's around to welcome them!")
-            ->action('View Your Order', url('/'))
+            ->action('View Your Order', config('app.site_url'))
             ->line('See you soon! 🐣');
 
         return $this->withEmailFooter($mail);

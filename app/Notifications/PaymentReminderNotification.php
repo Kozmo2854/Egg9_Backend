@@ -59,7 +59,7 @@ class PaymentReminderNotification extends Notification implements ShouldQueue
             ->line("• {$this->quantity} eggs")
             ->line("• **{$totalFormatted} RSD**")
             ->line('No rush, but our chickens would appreciate it when you get a chance! 😊')
-            ->action('Complete Payment', url('/'))
+            ->action('Complete Payment', config('app.site_url'))
             ->line('Thanks for being part of the Egg9 family! 🐣');
 
         return $this->withEmailFooter($mail);

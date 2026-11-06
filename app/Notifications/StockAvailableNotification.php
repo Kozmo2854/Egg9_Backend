@@ -55,7 +55,7 @@ class StockAvailableNotification extends Notification implements ShouldQueue
             ->line("Our chickens have been busy this week and we've got fresh eggs waiting for you! 🥚")
             ->line("**{$this->week->available_eggs} eggs** available at **{$pricePerDozen} RSD** per dozen.")
             ->line('Don\'t miss out - order while supplies last!')
-            ->action('Order Now', url('/'))
+            ->action('Order Now', config('app.site_url'))
             ->line('Thank you for supporting our little farm! 🐣');
 
         return $this->withEmailFooter($mail);

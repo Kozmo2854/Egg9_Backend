@@ -58,7 +58,7 @@ class OrderDeliveredNotification extends Notification implements ShouldQueue
             ->line("• {$this->quantity} fresh eggs")
             ->line("• Total: {$totalFormatted} RSD")
             ->line("They're ready and waiting for you to pick them up!")
-            ->action('View Your Order', url('/'))
+            ->action('View Your Order', config('app.site_url'))
             ->line('Thank you for being part of the Egg9 family! 🐣');
 
         return $this->withEmailFooter($mail);
