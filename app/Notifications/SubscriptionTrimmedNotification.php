@@ -55,7 +55,7 @@ class SubscriptionTrimmedNotification extends Notification implements ShouldQueu
             ->line("**This week's order:** {$this->newQuantity} eggs")
             ->line("We know this isn't ideal, and we really appreciate your understanding. The girls are doing their best! 🐣")
             ->line("Your subscription will automatically return to {$this->originalQuantity} eggs as soon as production picks back up.")
-            ->action('View Your Order', url('/'))
+            ->action('View Your Order', config('app.site_url'))
             ->line('Thank you for being part of the Egg9 family!');
 
         return $this->withEmailFooter($mail);
