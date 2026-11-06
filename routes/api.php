@@ -7,7 +7,6 @@ use App\Http\Controllers\OrderController;
 use App\Http\Controllers\PushTokenController;
 use App\Http\Controllers\SettingsController;
 use App\Http\Controllers\SubscriptionController;
-use App\Http\Controllers\TestEmailBlastController;
 use App\Http\Controllers\TestMailController;
 use App\Http\Controllers\WeekController;
 use Illuminate\Support\Facades\Route;
@@ -31,9 +30,6 @@ Route::get('/orders/confirm-pickup/{order}', [OrderController::class, 'confirmPi
 Route::post('/cron/process-weekly-cycle', [CronController::class, 'processWeeklyCycle']);
 Route::post('/cron/payment-reminder', [CronController::class, 'sendPaymentReminders']);
 Route::post('/cron/pickup-reminder', [CronController::class, 'sendPickupReminders']);
-
-// TEST EMAIL BLAST — REMOVE AFTER QA
-Route::post('/test/send-all-emails', [TestEmailBlastController::class, 'sendAll']);
 
 // Protected Routes
 Route::middleware('auth:sanctum')->group(function () {
