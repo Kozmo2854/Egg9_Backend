@@ -492,6 +492,24 @@ The search response's `total` is the size of the WHOLE mailbox, not the number o
 3. `search` with `query=to:<addr>`, check `messages_count`, then `GET /api/v1/message/<ID>`.
 4. Check subject, recipient and links: CTA links point to `SITE_URL` (`http://localhost:8081` locally), signed links (e.g. pickup confirm) to `APP_URL` (`http://localhost:8000`).
 
+### Password reset example
+
+```bash
+curl -s -X DELETE http://localhost:8025/api/v1/messages
+
+# Always the same 200 response; the email is sent after the response (defer())
+curl -s -X POST http://localhost:8000/api/forgot-password \
+  -H 'Accept: application/json' -H 'Content-Type: application/json' \
+  -d '{"email":"reset-test@example.test"}'
+
+# Read the newest message for that address and extract the reset link
+ID=$(curl -s -G http://localhost:8025/api/v1/search --data-urlencode "query=to:reset-test@example.test" | jq -r '.messages[0].ID')
+curl -s http://localhost:8025/api/v1/message/$ID | jq -r '.Text' | grep -o 'http[^ )]*/reset-password?[^ )]*'
+# -> http://localhost:8081/reset-password?token=<token>&email=reset-test%40example.test
+```
+
+Subject is `🔑 Reset Your Egg9 Password`. Unknown emails get the same 200 and no message. Open the link in the web app, or finish the reset via the API with `POST /api/reset-password` (`token`, `email`, `password`, `password_confirmation`).
+
 **Warnings:**
 - `$user->notify(...)` on an **unsaved** user (`new User([...])` / `User::factory()->make()`) silently sends **nothing**: notifications are `ShouldQueue`, and with `sync` the job cannot rehydrate an unsaved model, so it is dropped without an error.
 - Use only `@example.test` recipients.
