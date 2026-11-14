@@ -152,7 +152,8 @@ Copy `.env.example` and configure database credentials.
 | `FRONTEND_URL` | Frontend URL for CORS | `https://egg9frontend-production.up.railway.app` |
 | `QUEUE_CONNECTION` | Queue driver (use `sync` for immediate processing) | `sync` |
 | `CRON_SECRET` | Secret token for cron endpoint authentication | `your-secure-random-string` |
-| `MAIL_PASSWORD` | Gmail App Password for email notifications | `your-16-char-app-password` |
+| `MAIL_MAILER` | Mail transport (`resend` in production) | `resend` |
+| `RESEND_KEY` | Resend API key for email notifications | `re_...` |
 
 **Notes:**
 - Railway auto-provides MySQL credentials (`DB_HOST`, `DB_PORT`, `DB_DATABASE`, `DB_USERNAME`, `DB_PASSWORD`)
@@ -170,23 +171,10 @@ Egg9 uses Laravel Notifications for both email and push notifications:
 - Pickup reminders (Monday after delivery)
 - Subscription adjustment notifications
 
-### Gmail SMTP Setup
+### Email Delivery
 
-1. Create a Gmail account for the app
-2. Enable 2-Factor Authentication
-3. Generate an App Password: https://myaccount.google.com/apppasswords
-4. Configure environment variables:
-
-```env
-MAIL_MAILER=smtp
-MAIL_HOST=smtp.gmail.com
-MAIL_PORT=587
-MAIL_USERNAME=your-email@gmail.com
-MAIL_PASSWORD=your-app-password
-MAIL_ENCRYPTION=tls
-MAIL_FROM_ADDRESS=your-email@gmail.com
-MAIL_FROM_NAME=Egg9
-```
+- **Local and staging:** mail goes to [Mailpit](https://mailpit.axllent.org/), an SMTP sink with a web UI and REST API. Locally it runs in `docker-compose.yml` (SMTP `mailpit:1025`, UI http://localhost:8025). Nothing is delivered to real inboxes. See [TESTING.md](TESTING.md#mailpit) for the API.
+- **Production:** mail is sent through [Resend](https://resend.com/) (`MAIL_MAILER=resend`, `RESEND_KEY`), configured in the Railway dashboard.
 
 ### Push Notifications
 
