@@ -4,13 +4,16 @@ namespace Tests\Feature;
 
 use App\Models\User;
 use App\Notifications\PasswordResetNotification;
+use Illuminate\Auth\Events\PasswordReset;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\Password;
 use Illuminate\Support\Facades\URL;
 use Illuminate\Testing\TestResponse;
+use Laravel\Sanctum\Sanctum;
 use RuntimeException;
 use Tests\TestCase;
 
@@ -58,6 +61,7 @@ class PasswordResetTest extends TestCase
             $url = $notification->toMail($user)->actionUrl;
             $expectedPrefix = rtrim(config('app.site_url'), '/').'/reset-password?';
             $this->assertStringStartsWith($expectedPrefix, $url);
+            $this->assertStringContainsString('email=jane%2Beggs%40example.com', $url);
 
             parse_str((string) parse_url($url, PHP_URL_QUERY), $query);
             $this->assertSame($notification->token, $query['token']);
@@ -78,6 +82,31 @@ class PasswordResetTest extends TestCase
         $this->assertSame('Hi Jane!', $mail->greeting);
         $this->assertSame('Reset Password', $mail->actionText);
         $this->assertContains('Thanks for being part of the Egg9 family! 🐣', $mail->outroLines);
+    }
+
+    public function test_reset_email_expiry_text_comes_from_config(): void
+    {
+        config(['auth.passwords.users.expire' => 15]);
+        $user = User::factory()->create();
+
+        $mail = (new PasswordResetNotification('abc'))->toMail($user);
+
+        $this->assertContains(
+            "This link expires in 15 minutes. If you didn't ask for it, no worries – just ignore this email and your password stays the same.",
+            $mail->introLines
+        );
+    }
+
+    public function test_reset_email_greeting_cannot_inject_markdown_or_html(): void
+    {
+        $user = User::factory()->create(['name' => '[Verify](https://evil.example) <b>Jane</b> `x`']);
+
+        $mail = (new PasswordResetNotification('abc'))->toMail($user);
+
+        $this->assertSame('Hi Verifyhttps://evil.example bJane/b x!', $mail->greeting);
+        $html = (string) $mail->render();
+        $this->assertStringNotContainsString('href="https://evil.example"', $html);
+        $this->assertStringNotContainsString('<b>Jane</b>', $html);
     }
 
     public function test_reset_email_is_sent_even_when_email_notifications_are_disabled(): void
@@ -151,8 +180,10 @@ class PasswordResetTest extends TestCase
 
     public function test_user_can_reset_password_with_valid_token(): void
     {
+        Event::fake([PasswordReset::class]);
         $user = User::factory()->create(['password' => Hash::make('old-secret')]);
         $user->createToken('api-token');
+        $oldRememberToken = $user->remember_token;
         $token = Password::createToken($user);
 
         $this->resetWith(['token' => $token, 'email' => $user->email])
@@ -160,6 +191,8 @@ class PasswordResetTest extends TestCase
             ->assertExactJson(['message' => 'Password has been reset successfully.']);
 
         $this->assertSame(0, $user->tokens()->count(), 'All Sanctum tokens are revoked');
+        $this->assertNotSame($oldRememberToken, $user->refresh()->remember_token);
+        Event::assertDispatched(PasswordReset::class, fn (PasswordReset $event) => $event->user->is($user));
 
         $this->postJson('/api/login', ['email' => $user->email, 'password' => 'old-secret'])
             ->assertStatus(422);
@@ -223,6 +256,46 @@ class PasswordResetTest extends TestCase
         }
 
         $this->resetWith(['token' => 'wrong', 'email' => 'nobody@example.com'])->assertStatus(429);
+    }
+
+    public function test_forgot_and_reset_have_independent_rate_limits(): void
+    {
+        for ($i = 0; $i < 5; $i++) {
+            $this->postJson('/api/forgot-password', ['email' => "user{$i}@example.com"])->assertOk();
+        }
+
+        // A full forgot-password bucket does not throttle reset-password (separate named limiters).
+        for ($i = 0; $i < 5; $i++) {
+            $this->resetWith(['token' => 'wrong', 'email' => 'nobody@example.com'])->assertStatus(422);
+        }
+
+        $this->postJson('/api/forgot-password', ['email' => 'user6@example.com'])
+            ->assertStatus(429)
+            ->assertHeader('Content-Type', 'application/json');
+        $this->resetWith(['token' => 'wrong', 'email' => 'nobody@example.com'])
+            ->assertStatus(429)
+            ->assertHeader('Content-Type', 'application/json');
+    }
+
+    public function test_deleting_account_removes_pending_reset_token(): void
+    {
+        $user = User::factory()->create();
+        Password::createToken($user);
+        $this->assertDatabaseHas('password_reset_tokens', ['email' => $user->email]);
+
+        Sanctum::actingAs($user);
+        $this->deleteJson('/api/user', ['password' => 'password'])->assertOk();
+
+        $this->assertDatabaseMissing('password_reset_tokens', ['email' => $user->email]);
+    }
+
+    public function test_forgot_password_response_lets_the_client_finish_before_the_deferred_send(): void
+    {
+        $response = $this->postJson('/api/forgot-password', ['email' => 'nobody@example.com']);
+
+        $response->assertOk()
+            ->assertHeader('Connection', 'close')
+            ->assertHeader('Content-Length', (string) strlen($response->getContent()));
     }
 
     // ---------------------------------------------------------------
