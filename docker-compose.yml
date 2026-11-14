@@ -19,6 +19,7 @@ services:
     environment:
       - APP_ENV=local
       - APP_DEBUG=true
+      - APP_URL=http://localhost:8000
       - DB_CONNECTION=mysql
       - DB_HOST=mysql
       - DB_PORT=3306
@@ -28,6 +29,9 @@ services:
       - MAIL_MAILER=smtp
       - MAIL_HOST=mailpit
       - MAIL_PORT=1025
+      # Mailpit needs no auth; blank these so a stale .env can't trigger SMTP AUTH
+      - MAIL_USERNAME=
+      - MAIL_PASSWORD=
       - QUEUE_CONNECTION=sync
       - SITE_URL=http://localhost:8081
     depends_on:
@@ -35,8 +39,12 @@ services:
         condition: service_healthy
     networks:
       - egg9_network
+    # The bind mount hides the image's chown and Apache runs as www-data,
+    # so make storage/ and bootstrap/cache writable (chmod only, no chown).
     command: >
-      sh -c "composer install --no-interaction &&
+      sh -c "mkdir -p storage/logs storage/framework/cache storage/framework/sessions storage/framework/views bootstrap/cache &&
+             chmod -R a+rwX storage bootstrap/cache &&
+             composer install --no-interaction &&
              php artisan migrate --force &&
              apache2-foreground"
 
@@ -71,8 +79,8 @@ services:
     volumes:
       - mailpit_data:/data
     ports:
-      - "8025:8025"  # Web UI + REST API
-      - "1025:1025"  # SMTP
+      - "127.0.0.1:8025:8025"  # Web UI + REST API (loopback only)
+      - "127.0.0.1:1025:1025"  # SMTP (loopback only)
     networks:
       - egg9_network
     healthcheck:
