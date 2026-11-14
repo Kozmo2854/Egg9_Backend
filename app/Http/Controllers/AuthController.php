@@ -3,9 +3,14 @@
 namespace App\Http\Controllers;
 
 use App\Models\User;
+use Illuminate\Auth\Events\PasswordReset;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Password;
+use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
+use Throwable;
 
 class AuthController extends Controller
 {
@@ -81,6 +86,70 @@ class AuthController extends Controller
             ],
             'token' => $token,
         ], 201);
+    }
+
+    /**
+     * Send a password reset link to the given email (if it belongs to an account)
+     */
+    public function forgotPassword(Request $request)
+    {
+        $request->validate([
+            'email' => 'required|email',
+        ]);
+
+        $email = $request->email;
+
+        // Sent after the response so known and unknown emails take the same time.
+        defer(function () use ($email) {
+            try {
+                Password::sendResetLink(['email' => $email]);
+            } catch (Throwable $e) {
+                Log::error('Password reset email failed');
+            }
+        });
+
+        // Deliberate deviation from the docs: one uniform response (sent / unknown user / throttled) to avoid account enumeration.
+        return response()->json([
+            'message' => 'Check your mailbox for a password reset link.',
+        ]);
+    }
+
+    /**
+     * Reset the password using an emailed reset token
+     */
+    public function resetPassword(Request $request)
+    {
+        $request->validate([
+            'token' => 'required|string',
+            'email' => 'required|email',
+            'password' => 'required|string|min:6|confirmed',
+        ]);
+
+        $status = Password::reset(
+            $request->only('email', 'password', 'password_confirmation', 'token'),
+            function (User $user, string $password) {
+                $user->forceFill([
+                    'password' => Hash::make($password),
+                    'remember_token' => Str::random(60),
+                ])->save();
+
+                // Sign the user out everywhere
+                $user->tokens()->delete();
+
+                event(new PasswordReset($user));
+            }
+        );
+
+        // Deliberate deviation from the docs: one uniform error (unknown user / bad / expired / used token) to avoid account enumeration.
+        if ($status !== Password::PASSWORD_RESET) {
+            throw ValidationException::withMessages([
+                'token' => ['This password reset link is invalid or has expired.'],
+            ]);
+        }
+
+        return response()->json([
+            'message' => 'Password has been reset successfully.',
+        ]);
     }
 
     /**
