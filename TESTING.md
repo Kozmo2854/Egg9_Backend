@@ -469,7 +469,7 @@ Local (and staging) email goes to [Mailpit](https://mailpit.axllent.org/), an SM
 curl -s http://localhost:8025/api/v1/messages
 
 # Search, e.g. all mail sent to one address (also: subject:"...", from:...)
-curl -s -G http://localhost:8025/api/v1/search --data-urlencode "query=to:customer@example.com"
+curl -s -G http://localhost:8025/api/v1/search --data-urlencode "query=to:customer@example.test"
 
 # Full message (headers, HTML + text body, links). Use an ID from the list/search, or "latest"
 curl -s http://localhost:8025/api/v1/message/<ID>
@@ -478,7 +478,24 @@ curl -s http://localhost:8025/api/v1/message/<ID>
 curl -s -X DELETE http://localhost:8025/api/v1/messages
 ```
 
-Typical assertion flow: `DELETE` the inbox, trigger the notification (API call or tinker), `search` by `to:<addr>`, then fetch the message and check subject, recipient and that links point to `SITE_URL` (`http://localhost:8081` locally).
+The search response's `total` is the size of the WHOLE mailbox, not the number of hits - the match count is `messages_count`.
+
+### Typical assertion flow
+
+1. `DELETE /api/v1/messages` to reset the inbox.
+2. Trigger the notification for a **persisted** test user (a real `users` row, e.g. created in a tinker script), either via the API flow that sends it or directly in tinker:
+   ```php
+   $user = User::where('email', 'mailpit-test@example.test')->firstOrFail();
+   Notification::sendNow($user, new \App\Notifications\WeekSkippedNotification());
+   ```
+   `Notification::sendNow()` goes through the same `toMail()`/mailer path but skips the queue.
+3. `search` with `query=to:<addr>`, check `messages_count`, then `GET /api/v1/message/<ID>`.
+4. Check subject, recipient and links: CTA links point to `SITE_URL` (`http://localhost:8081` locally), signed links (e.g. pickup confirm) to `APP_URL` (`http://localhost:8000`).
+
+**Warnings:**
+- `$user->notify(...)` on an **unsaved** user (`new User([...])` / `User::factory()->make()`) silently sends **nothing**: notifications are `ShouldQueue`, and with `sync` the job cannot rehydrate an unsaved model, so it is dropped without an error.
+- Use only `@example.test` recipients.
+- Never call `NotificationService` against a database that holds real push tokens - it also sends Expo push notifications to real devices.
 
 ### Notes
 

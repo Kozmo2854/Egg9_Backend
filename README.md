@@ -68,6 +68,8 @@ docker compose exec backend php artisan migrate:fresh --seed
 
 Compose sets `MAIL_HOST=mailpit`, `QUEUE_CONNECTION=sync` and `SITE_URL=http://localhost:8081` for the backend, so every notification email lands in Mailpit. The project name is pinned to `egg9`, so the MySQL data volume (`egg9_mysql_data`) and the Mailpit volume (`egg9_mailpit_data`) are preserved across `down`/`up`. Never use `docker compose down -v` unless you want to wipe them.
 
+After changing dependencies or the `Dockerfile`, recreate with `docker compose up -d --build`. (For the frontend, `docker compose up --build -V` also refreshes its anonymous `node_modules` volume.)
+
 This compose also creates the `egg9_network` network that `Egg9_Frontend/docker-compose.yml` joins, so start the backend first.
 
 **Common Docker Commands:**
