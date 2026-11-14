@@ -7,7 +7,6 @@ use App\Http\Controllers\OrderController;
 use App\Http\Controllers\PushTokenController;
 use App\Http\Controllers\SettingsController;
 use App\Http\Controllers\SubscriptionController;
-use App\Http\Controllers\TestMailController;
 use App\Http\Controllers\WeekController;
 use Illuminate\Support\Facades\Route;
 
@@ -87,8 +86,5 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::put('/settings/price', [SettingsController::class, 'updatePrice']);
         Route::get('/settings/payment', [AdminController::class, 'getPaymentSettings']);
         Route::put('/settings/payment', [AdminController::class, 'updatePaymentSettings']);
-
-        // TEMPORARY: staging-only mail test, remove after Resend verification
-        Route::post('/test-mail', [TestMailController::class, 'send']);
     });
 });

@@ -6,7 +6,7 @@
 #   - DB_HOST   ${{MySQL.MYSQLHOST}}
 #   - DB_PORT   ${{MySQL.MYSQLPORT}}
 #   - DB_PASSWORD ${{MySQL.MYSQL_ROOT_PASSWORD}}
-#   - MAIL_PASSWORD                  (secret)
+#   - MAIL_* / RESEND_KEY            (mail config: prod = Resend, staging = Mailpit)
 
 [build]
 builder = "DOCKERFILE"
@@ -48,13 +48,7 @@ SESSION_PATH = "/"
 SESSION_DOMAIN = "null"
 BCRYPT_ROUNDS = "12"
 MEMCACHED_HOST = "127.0.0.1"
-MAIL_MAILER = "smtp"
-MAIL_HOST = "smtp.gmail.com"
-MAIL_PORT = "587"
-MAIL_ENCRYPTION = "tls"
-MAIL_FROM_ADDRESS = "egg9nine@gmail.com"
-MAIL_FROM_NAME = "Egg9"
-MAIL_USERNAME = "egg9nine@gmail.com"
+# Mail vars (MAIL_*, RESEND_KEY) live in the Railway dashboard.
 
 # --- Staging ---
 [environments.staging.deploy]
@@ -88,10 +82,4 @@ SESSION_PATH = "/"
 SESSION_DOMAIN = "null"
 BCRYPT_ROUNDS = "12"
 MEMCACHED_HOST = "127.0.0.1"
-MAIL_MAILER = "array"
-MAIL_HOST = "smtp.gmail.com"
-MAIL_PORT = "587"
-MAIL_ENCRYPTION = "tls"
-MAIL_FROM_ADDRESS = "egg9nine@gmail.com"
-MAIL_FROM_NAME = "Egg9"
-MAIL_USERNAME = "egg9nine@gmail.com"
+# Mail vars (MAIL_*, RESEND_KEY) live in the Railway dashboard.
