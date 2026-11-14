@@ -11,6 +11,7 @@ This document provides comprehensive testing documentation for the Egg9 backend 
 5. [Feature Tests](#feature-tests)
 6. [Test Data](#test-data)
 7. [Writing New Tests](#writing-new-tests)
+8. [Mailpit](#mailpit)
 
 ## Test Overview
 
@@ -448,6 +449,37 @@ public function test_something(): void
     dd($response->json()); // Dumps response and stops
 }
 ```
+
+## Mailpit
+
+Local (and staging) email goes to [Mailpit](https://mailpit.axllent.org/), an SMTP sink started by `docker compose up -d` (see [README](README.md#docker-setup-recommended)). Nothing reaches real inboxes, so notification emails can be triggered freely and asserted on.
+
+- **Web UI:** http://localhost:8025
+- **REST API:** `http://localhost:8025/api/v1/...` (JSON, no auth locally)
+
+### Agent / script API calls
+
+```bash
+# List messages (newest first; supports ?limit=&start=)
+curl -s http://localhost:8025/api/v1/messages
+
+# Search, e.g. all mail sent to one address (also: subject:"...", from:...)
+curl -s -G http://localhost:8025/api/v1/search --data-urlencode "query=to:customer@example.com"
+
+# Full message (headers, HTML + text body, links). Use an ID from the list/search, or "latest"
+curl -s http://localhost:8025/api/v1/message/<ID>
+
+# Delete all messages - reset the inbox between test runs
+curl -s -X DELETE http://localhost:8025/api/v1/messages
+```
+
+Typical assertion flow: `DELETE` the inbox, trigger the notification (API call or tinker), `search` by `to:<addr>`, then fetch the message and check subject, recipient and that links point to `SITE_URL` (`http://localhost:8081` locally).
+
+### Notes
+
+- PHPUnit is **not** wired to Mailpit: `phpunit.xml` keeps `MAIL_MAILER=array`, so the test suite never sends real SMTP traffic. Use `Notification::fake()` / `Mail::fake()` in tests.
+- Mail notifications are queued (`ShouldQueue`); compose sets `QUEUE_CONNECTION=sync` so they are sent immediately.
+- Staging also runs Mailpit, but its UI/API is protected by basic auth (credentials are held by the project owner). Agents use the local Mailpit by default.
 
 ## Test Performance
 
