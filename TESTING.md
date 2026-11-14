@@ -497,7 +497,8 @@ The search response's `total` is the size of the WHOLE mailbox, not the number o
 ```bash
 curl -s -X DELETE http://localhost:8025/api/v1/messages
 
-# Always the same 200 response; the email is sent after the response (defer())
+# Always the same 200 response; the email is sent with defer() after the response has been delivered
+# (Content-Length + Connection: close let the client finish first under Apache/mod_php)
 curl -s -X POST http://localhost:8000/api/forgot-password \
   -H 'Accept: application/json' -H 'Content-Type: application/json' \
   -d '{"email":"reset-test@example.test"}'

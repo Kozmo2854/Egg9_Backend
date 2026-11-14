@@ -99,8 +99,12 @@ class AuthController extends Controller
 
         $email = $request->email;
 
-        // Sent after the response so known and unknown emails take the same time.
+        // The send runs after the response has been delivered (defer()), so known and
+        // unknown emails cost the client the same time.
         defer(function () use ($email) {
+            // The client may already have disconnected; finish the send anyway.
+            ignore_user_abort(true);
+
             try {
                 Password::sendResetLink(['email' => $email]);
             } catch (Throwable $e) {
@@ -109,9 +113,16 @@ class AuthController extends Controller
         });
 
         // Deliberate deviation from the docs: one uniform response (sent / unknown user / throttled) to avoid account enumeration.
-        return response()->json([
+        $response = response()->json([
             'message' => 'Check your mailbox for a password reset link.',
         ]);
+
+        // Deliberate addition: under Apache/mod_php (no fastcgi_finish_request) the deferred send runs on the
+        // still-open connection; Content-Length + Connection: close let the client finish reading first.
+        $response->headers->set('Content-Length', (string) strlen($response->getContent()));
+        $response->headers->set('Connection', 'close');
+
+        return $response;
     }
 
     /**

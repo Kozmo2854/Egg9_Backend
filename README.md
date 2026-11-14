@@ -124,7 +124,7 @@ routes/api.php             # API route definitions
 
 **Password reset** (public; named rate limiters `password-forgot` / `password-reset`, 5 requests per minute per IP each, defined in `AppServiceProvider`, on top of the broker's 60 s per-email limit; reset tokens expire after 60 min and are single-use):
 
-- `POST /api/forgot-password` `{ "email" }` → always `200 { "message": "Check your mailbox for a password reset link." }` (registered, unknown and throttled emails get the identical response, so account existence is not revealed). The email links to `SITE_URL/reset-password?token=…&email=…`.
+- `POST /api/forgot-password` `{ "email" }` → always `200 { "message": "Check your mailbox for a password reset link." }` (registered, unknown and throttled emails get the identical response, so account existence is not revealed). The email is sent with `defer()` after the response has been delivered; the response carries `Content-Length` + `Connection: close` so the client finishes first under Apache/mod_php (which has no `fastcgi_finish_request`) instead of waiting for the mail send. The email links to `SITE_URL/reset-password?token=…&email=…`.
 - `POST /api/reset-password` `{ "token", "email", "password", "password_confirmation" }` (password min 6) → `200 { "message": "Password has been reset successfully." }` and all of the user's API tokens are revoked. Any invalid, expired, used or unknown token/email → the same `422` on `token` ("This password reset link is invalid or has expired."); password problems → `422` on `password`.
 
 All `api/*` errors are JSON, with or without an `Accept: application/json` header.
