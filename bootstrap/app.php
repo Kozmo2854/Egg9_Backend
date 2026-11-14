@@ -3,6 +3,7 @@
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
+use Illuminate\Http\Request;
 
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
@@ -20,6 +21,10 @@ return Application::configure(basePath: dirname(__DIR__))
             \Laravel\Sanctum\Http\Middleware\EnsureFrontendRequestsAreStateful::class,
         ]);
 
+        // API guests get a 401 (rendered as JSON below), not a redirect to the
+        // non-existent `login` route, which used to throw a 500 without an Accept header.
+        $middleware->redirectGuestsTo(fn (Request $request) => $request->is('api/*') ? null : route('login'));
+
         $middleware->alias([
             'admin' => \App\Http\Middleware\EnsureUserIsAdmin::class,
         ]);
@@ -30,6 +35,10 @@ return Application::configure(basePath: dirname(__DIR__))
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
+        // The API always answers errors as JSON, even without an `Accept: application/json`
+        // header (no login redirect / 500). Custom `render` callbacks below still win.
+        $exceptions->shouldRenderJsonWhen(fn ($request, $e) => $request->is('api/*') || $request->expectsJson());
+
         // A tampered/expired signed pickup-confirm link lands here (403 from the
         // `signed` middleware). The link is opened in a browser from an email, so
         // render a friendly branded HTML page instead of a JSON/plain 403.
