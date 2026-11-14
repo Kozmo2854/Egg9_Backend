@@ -361,6 +361,8 @@ class AuthController extends Controller
         $user->subscriptions()->delete();
         // Keep orders for record keeping but nullify user
         $user->orders()->update(['user_id' => null]);
+        // Drop any pending password reset token for this account
+        Password::deleteToken($user);
         
         $user->delete();
 
