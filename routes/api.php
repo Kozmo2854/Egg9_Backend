@@ -19,8 +19,8 @@ use Illuminate\Support\Facades\Route;
 // Authentication Routes (Public)
 Route::post('/login', [AuthController::class, 'login']);
 Route::post('/register', [AuthController::class, 'register']);
-Route::post('/forgot-password', [AuthController::class, 'forgotPassword'])->middleware('throttle:5,1');
-Route::post('/reset-password', [AuthController::class, 'resetPassword'])->middleware('throttle:5,1');
+Route::post('/forgot-password', [AuthController::class, 'forgotPassword'])->middleware('throttle:password-forgot');
+Route::post('/reset-password', [AuthController::class, 'resetPassword'])->middleware('throttle:password-reset');
 
 // One-click pickup confirmation from email (Public, secured by signed URL)
 Route::get('/orders/confirm-pickup/{order}', [OrderController::class, 'confirmPickupFromEmail'])

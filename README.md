@@ -122,7 +122,7 @@ routes/api.php             # API route definitions
 
 **Authentication:** `/api/login`, `/api/register`, `/api/logout`, `/api/user`
 
-**Password reset** (public, `throttle:5,1` per IP on top of the broker's 60 s per-email limit; reset tokens expire after 60 min and are single-use):
+**Password reset** (public; named rate limiters `password-forgot` / `password-reset`, 5 requests per minute per IP each, defined in `AppServiceProvider`, on top of the broker's 60 s per-email limit; reset tokens expire after 60 min and are single-use):
 
 - `POST /api/forgot-password` `{ "email" }` → always `200 { "message": "Check your mailbox for a password reset link." }` (registered, unknown and throttled emails get the identical response, so account existence is not revealed). The email links to `SITE_URL/reset-password?token=…&email=…`.
 - `POST /api/reset-password` `{ "token", "email", "password", "password_confirmation" }` (password min 6) → `200 { "message": "Password has been reset successfully." }` and all of the user's API tokens are revoked. Any invalid, expired, used or unknown token/email → the same `422` on `token` ("This password reset link is invalid or has expired."); password problems → `422` on `password`.
