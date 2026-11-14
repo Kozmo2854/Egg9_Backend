@@ -42,22 +42,33 @@ php artisan serve
 
 API available at: `http://localhost:8000/api`
 
-### Docker Setup
+### Docker Setup (recommended)
+
+`docker-compose.yml` runs the API, MySQL and [Mailpit](https://mailpit.axllent.org/) (catches all outgoing mail).
 
 ```bash
-# Start all services
+# One-time: create your local .env (bind-mounted into the container)
+cp .env.example .env
+
+# Start all services (builds the backend image on first run; runs composer install + migrations)
 docker compose up -d
 
-# Run migrations
-docker compose exec app php artisan migrate:fresh --seed
+# One-time: generate the app key
+docker compose exec backend php artisan key:generate
 
-# API available at: http://localhost:8000/api
-# MySQL at: localhost:3307
+# Optional: seed demo data
+docker compose exec backend php artisan migrate:fresh --seed
 ```
 
-**Docker Services:**
-- `app` - Laravel (PHP 8.2 + Apache) on port 8000
-- `db` - MySQL 8.0 on port 3307
+| Service | URL / port |
+|---------|------------|
+| `backend` - Laravel (PHP 8.2 + Apache) | API: http://localhost:8000/api |
+| `mysql` - MySQL 8.0 | `localhost:3307` (user `egg9_user` / `egg9_password`, db `egg9`) |
+| `mailpit` - SMTP sink | UI + REST API: http://localhost:8025, SMTP `localhost:1025` |
+
+Compose sets `MAIL_HOST=mailpit`, `QUEUE_CONNECTION=sync` and `SITE_URL=http://localhost:8081` for the backend, so every notification email lands in Mailpit. The project name is pinned to `egg9`, so the MySQL data volume (`egg9_mysql_data`) and the Mailpit volume (`egg9_mailpit_data`) are preserved across `down`/`up`. Never use `docker compose down -v` unless you want to wipe them.
+
+This compose also creates the `egg9_network` network that `Egg9_Frontend/docker-compose.yml` joins, so start the backend first.
 
 **Common Docker Commands:**
 ```bash
@@ -66,14 +77,14 @@ docker compose up -d
 docker compose down
 
 # Run Artisan commands
-docker compose exec app php artisan migrate
-docker compose exec app php artisan test
+docker compose exec backend php artisan migrate
+docker compose exec backend php artisan test
 
 # Database shell
-docker compose exec db mysql -u egg9_user -pegg9_password egg9
+docker compose exec mysql mysql -u egg9_user -pegg9_password egg9
 
 # Reset database
-docker compose exec app php artisan migrate:fresh --seed
+docker compose exec backend php artisan migrate:fresh --seed
 ```
 
 ## Technology Stack
@@ -140,7 +151,7 @@ php artisan egg9:process-weekly-cycle --force
 
 ### Local Development
 
-Copy `.env.example` and configure database credentials.
+Copy `.env.example` to `.env`. With Docker nothing else is needed; for a host setup, configure the database credentials and point `MAIL_HOST`/`MAIL_PORT` at a reachable Mailpit (or set `MAIL_MAILER=log`).
 
 ### Production (Railway)
 
