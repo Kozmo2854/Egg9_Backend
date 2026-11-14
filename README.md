@@ -78,7 +78,9 @@ docker compose down
 
 # Run Artisan commands
 docker compose exec backend php artisan migrate
-docker compose exec backend php artisan test
+# Tests: always force SQLite in-memory - the container env points at the real local MySQL
+# and the tests use RefreshDatabase (would wipe it)
+docker compose exec -e DB_CONNECTION=sqlite -e DB_DATABASE=:memory: backend php artisan test
 
 # Database shell
 docker compose exec mysql mysql -u egg9_user -pegg9_password egg9

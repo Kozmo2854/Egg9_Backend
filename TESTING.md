@@ -34,6 +34,11 @@ The Egg9 backend has comprehensive test coverage with:
 php artisan test
 ```
 
+Inside the Docker backend container, always force SQLite in-memory (the container env points at the real local MySQL and the tests use `RefreshDatabase`, which would wipe it):
+```bash
+docker compose exec -e DB_CONNECTION=sqlite -e DB_DATABASE=:memory: backend php artisan test
+```
+
 Expected output:
 ```
   PASS  Tests\Unit\OrderCalculationTest
