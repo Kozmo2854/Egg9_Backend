@@ -1,0 +1,101 @@
+# Local development stack: Laravel API + MySQL + Mailpit (SMTP sink).
+# Project name is pinned to "egg9" so the existing egg9_mysql_data volume is reused.
+# This file owns the "egg9_network" network that Egg9_Frontend/docker-compose.yml joins.
+name: egg9
+
+services:
+  # Backend - Laravel API (same Dockerfile Railway builds)
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: egg9_backend
+    restart: unless-stopped
+    working_dir: /var/www/html
+    volumes:
+      - .:/var/www/html
+    ports:
+      - "8000:8080"
+    environment:
+      - APP_ENV=local
+      - APP_DEBUG=true
+      - APP_URL=http://localhost:8000
+      - DB_CONNECTION=mysql
+      - DB_HOST=mysql
+      - DB_PORT=3306
+      - DB_DATABASE=egg9
+      - DB_USERNAME=egg9_user
+      - DB_PASSWORD=egg9_password
+      - MAIL_MAILER=smtp
+      - MAIL_HOST=mailpit
+      - MAIL_PORT=1025
+      # Mailpit needs no auth; blank these so a stale .env can't trigger SMTP AUTH
+      - MAIL_USERNAME=
+      - MAIL_PASSWORD=
+      - QUEUE_CONNECTION=sync
+      - SITE_URL=http://localhost:8081
+    depends_on:
+      mysql:
+        condition: service_healthy
+    networks:
+      - egg9_network
+    # The bind mount hides the image's chown and Apache runs as www-data,
+    # so make storage/ and bootstrap/cache writable (chmod only, no chown).
+    command: >
+      sh -c "mkdir -p storage/logs storage/framework/cache storage/framework/sessions storage/framework/views bootstrap/cache &&
+             chmod -R a+rwX storage bootstrap/cache &&
+             composer install --no-interaction &&
+             php artisan migrate --force &&
+             apache2-foreground"
+
+  # MySQL Database
+  mysql:
+    image: mysql:8.0
+    container_name: egg9_mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: egg9
+      MYSQL_USER: egg9_user
+      MYSQL_PASSWORD: egg9_password
+      MYSQL_ROOT_PASSWORD: root_password
+    volumes:
+      - mysql_data:/var/lib/mysql
+    ports:
+      - "3307:3306"
+    networks:
+      - egg9_network
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      timeout: 20s
+      retries: 10
+
+  # Mailpit - catches all outgoing mail. UI + REST API: http://localhost:8025
+  mailpit:
+    image: axllent/mailpit:v1.33.1
+    container_name: egg9_mailpit
+    restart: unless-stopped
+    environment:
+      MP_DATABASE: /data/mailpit.db
+    volumes:
+      - mailpit_data:/data
+    ports:
+      - "127.0.0.1:8025:8025"  # Web UI + REST API (loopback only)
+      - "127.0.0.1:1025:1025"  # SMTP (loopback only)
+    networks:
+      - egg9_network
+    healthcheck:
+      test: ["CMD", "/mailpit", "readyz"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+networks:
+  egg9_network:
+    name: egg9_network
+    driver: bridge
+
+volumes:
+  mysql_data:
+    driver: local
+  mailpit_data:
+    driver: local

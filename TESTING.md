@@ -11,6 +11,7 @@ This document provides comprehensive testing documentation for the Egg9 backend 
 5. [Feature Tests](#feature-tests)
 6. [Test Data](#test-data)
 7. [Writing New Tests](#writing-new-tests)
+8. [Mailpit](#mailpit)
 
 ## Test Overview
 
@@ -31,6 +32,11 @@ The Egg9 backend has comprehensive test coverage with:
 ### Run All Tests
 ```bash
 php artisan test
+```
+
+Inside the Docker backend container, always force SQLite in-memory (the container env points at the real local MySQL and the tests use `RefreshDatabase`, which would wipe it):
+```bash
+docker compose exec -e DB_CONNECTION=sqlite -e DB_DATABASE=:memory: backend php artisan test
 ```
 
 Expected output:
@@ -448,6 +454,54 @@ public function test_something(): void
     dd($response->json()); // Dumps response and stops
 }
 ```
+
+## Mailpit
+
+Local (and staging) email goes to [Mailpit](https://mailpit.axllent.org/), an SMTP sink started by `docker compose up -d` (see [README](README.md#docker-setup-recommended)). Nothing reaches real inboxes, so notification emails can be triggered freely and asserted on.
+
+- **Web UI:** http://localhost:8025
+- **REST API:** `http://localhost:8025/api/v1/...` (JSON, no auth locally)
+
+### Agent / script API calls
+
+```bash
+# List messages (newest first; supports ?limit=&start=)
+curl -s http://localhost:8025/api/v1/messages
+
+# Search, e.g. all mail sent to one address (also: subject:"...", from:...)
+curl -s -G http://localhost:8025/api/v1/search --data-urlencode "query=to:customer@example.test"
+
+# Full message (headers, HTML + text body, links). Use an ID from the list/search, or "latest"
+curl -s http://localhost:8025/api/v1/message/<ID>
+
+# Delete all messages - reset the inbox between test runs
+curl -s -X DELETE http://localhost:8025/api/v1/messages
+```
+
+The search response's `total` is the size of the WHOLE mailbox, not the number of hits - the match count is `messages_count`.
+
+### Typical assertion flow
+
+1. `DELETE /api/v1/messages` to reset the inbox.
+2. Trigger the notification for a **persisted** test user (a real `users` row, e.g. created in a tinker script), either via the API flow that sends it or directly in tinker:
+   ```php
+   $user = User::where('email', 'mailpit-test@example.test')->firstOrFail();
+   Notification::sendNow($user, new \App\Notifications\WeekSkippedNotification());
+   ```
+   `Notification::sendNow()` goes through the same `toMail()`/mailer path but skips the queue.
+3. `search` with `query=to:<addr>`, check `messages_count`, then `GET /api/v1/message/<ID>`.
+4. Check subject, recipient and links: CTA links point to `SITE_URL` (`http://localhost:8081` locally), signed links (e.g. pickup confirm) to `APP_URL` (`http://localhost:8000`).
+
+**Warnings:**
+- `$user->notify(...)` on an **unsaved** user (`new User([...])` / `User::factory()->make()`) silently sends **nothing**: notifications are `ShouldQueue`, and with `sync` the job cannot rehydrate an unsaved model, so it is dropped without an error.
+- Use only `@example.test` recipients.
+- Never call `NotificationService` against a database that holds real push tokens - it also sends Expo push notifications to real devices.
+
+### Notes
+
+- PHPUnit is **not** wired to Mailpit: `phpunit.xml` keeps `MAIL_MAILER=array`, so the test suite never sends real SMTP traffic. Use `Notification::fake()` / `Mail::fake()` in tests.
+- Mail notifications are queued (`ShouldQueue`); compose sets `QUEUE_CONNECTION=sync` so they are sent immediately.
+- Staging also runs Mailpit, but its UI/API is protected by basic auth (credentials are held by the project owner). Agents use the local Mailpit by default.
 
 ## Test Performance
 
