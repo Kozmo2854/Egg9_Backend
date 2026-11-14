@@ -108,7 +108,11 @@ class AuthController extends Controller
             try {
                 Password::sendResetLink(['email' => $email]);
             } catch (Throwable $e) {
-                Log::error('Password reset email failed');
+                // Class + code only: mailer messages can contain the recipient address.
+                Log::error('Password reset email failed', [
+                    'exception_class' => get_class($e),
+                    'code' => $e->getCode(),
+                ]);
             }
         });
 

@@ -110,13 +110,17 @@ class PasswordResetTest extends TestCase
     {
         $user = User::factory()->create();
         Log::spy();
-        Password::shouldReceive('sendResetLink')->once()->andThrow(new RuntimeException('smtp down'));
+        Password::shouldReceive('sendResetLink')->once()->andThrow(new RuntimeException('smtp down for '.$user->email, 42));
 
         $this->postJson('/api/forgot-password', ['email' => $user->email])
             ->assertOk()
             ->assertExactJson(['message' => 'Check your mailbox for a password reset link.']);
 
-        Log::shouldHaveReceived('error')->once()->with('Password reset email failed');
+        // Cause is logged by class + code only, never the message (may contain the recipient).
+        Log::shouldHaveReceived('error')->once()->with('Password reset email failed', [
+            'exception_class' => RuntimeException::class,
+            'code' => 42,
+        ]);
     }
 
     public function test_forgot_password_requires_a_valid_email(): void
